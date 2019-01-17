@@ -83,7 +83,7 @@ When you first run Collect, it is set to download forms from [https://opendataki
 
 To run functionality that makes API calls from your debug-signed builds, you may need to get an API key or otherwise authorize your app. The API keys included in the source code are the ones used for releases and they only work with release builds signed with the release keys.
 
-**Google Drive and Sheets APIs** - Follow the instructions in the "Generate the signing certificate fingerprint and register your application" section from [here](https://developers.google.com/drive/android/auth). Enable the Google Drive API [here](https://console.developers.google.com/apis/api/drive/). Enable the Google Sheets API [here](https://console.developers.google.com/apis/api/sheets.googleapis.com).
+**Google Drive and Sheets APIs** - Follow the instructions in the "Generate the signing certificate fingerprint and register your application" section from [here](https://developers.google.com/drive/android/auth). Enable the Google Drive API [here](https://console.developers.google.com/apis/api/drive.googleapis.com). Enable the Google Sheets API [here](https://console.developers.google.com/apis/api/sheets.googleapis.com).
 
 **Google Maps API** - Getting a Google Maps API key now requires providing a credit card number. As of October 2018, there is some free API usage provided and the card will not be charged without explicit user approval. You should carefully read the terms before providing a credit card number. Once you have created a billing account, follow the instructions [here](https://developers.google.com/maps/documentation/android-api/signup) and paste your key in the `AndroidManifest` as the value for `com.google.android.geo.API_KEY`. Please be sure not to commit your personal API key to a branch that you will submit a pull request for.
 
@@ -97,17 +97,17 @@ JavaRosa is the form engine that powers Collect. If you want to debug or change 
 1. Get the code from the [JavaRosa repo](https://github.com/opendatakit/javarosa)
 1. In Android Studio, select `File` -> `New` -> `New Module` -> `Import Gradle Project` and choose the project
 1. In Collect's `build.gradle` file, find the JavaRosa section:
-```gradle
-implementation(group: 'org.opendatakit', name: 'opendatakit-javarosa', version: 'x.y.z') {
-	exclude module: 'joda-time'
-}
-```
-1. Replace the JavaRosa section with this: 
-```gradle
-implementation (project(path: ':javarosa-master')) {
-	exclude module: 'joda-time'
-}
-```
+    ```gradle
+    implementation("org.opendatakit:opendatakit-javarosa:x.y.z") {
+        ...
+    }
+    ```
+1. Replace the first line like this, using `javarosa` or whatever name you specified when importing:
+    ```gradle
+    implementation (project(path: ':javarosa')) {
+        ...
+    }
+    ```
 
 **Jar file**
 
@@ -174,7 +174,10 @@ RELEASE_STORE_PASSWORD=secure-store-password
 RELEASE_KEY_ALIAS=key-alias
 RELEASE_KEY_PASSWORD=secure-alias-password
 ```
-To generate official signed releases, you'll need the keystore file, the keystore passwords, a configured `secrets.properties` file, and then run `./gradlew assembleRelease`. If successful, a signed release will be at `collect_app/build/outputs/apk`.
+
+Maintainers also have a `google-services.json` file in the `collect_app/src/odkCollectRelease` folder. The contents of the file are similar to the contents of `collect_app/src/google-services.json`.
+
+To generate official signed releases, you'll need the keystore file, the keystore passwords, a configured `collect_app/secrets.properties` file, and a configured `collect_app/src/odkCollectRelease/google-services.json` file. Then run `./gradlew assembleOdkCollectRelease`. If successful, a signed release will be at `collect_app/build/outputs/apk`.
 
 ## Troubleshooting
 
