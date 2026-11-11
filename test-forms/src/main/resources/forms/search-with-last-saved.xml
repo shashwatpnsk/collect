@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<h:html
+    xmlns="http://www.w3.org/2002/xforms"
+    xmlns:h="http://www.w3.org/1999/xhtml"
+    xmlns:ev="http://www.w3.org/2001/xml-events"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+    xmlns:jr="http://openrosa.org/javarosa"
+    xmlns:orx="http://openrosa.org/xforms"
+    xmlns:odk="http://www.opendatakit.org/xforms">
+    <h:head>
+        <h:title>Search with last-saved</h:title>
+        <model odk:xforms-version="1.0.0">
+            <instance>
+                <data id="search-with-last-saved">
+                    <group>
+                        <fruit/>
+                        <number/>
+                    </group>
+                    <meta>
+                        <instanceID/>
+                    </meta>
+                </data>
+            </instance>
+            <instance id="__last-saved" src="jr://instance/last-saved"/>
+            <bind nodeset="/data/group/fruit" type="string"/>
+            <setvalue ref="/data/group/fruit" value=" instance('__last-saved')/data/group/fruit " event="odk-instance-first-load"/>
+            <bind nodeset="/data/group/number" type="string"/>
+            <setvalue ref="/data/group/number" value=" instance('__last-saved')/data/group/number " event="odk-instance-first-load"/>
+            <bind nodeset="/data/meta/instanceID" type="string" readonly="true()" jr:preload="uid"/>
+        </model>
+    </h:head>
+    <h:body>
+        <group appearance="field-list" ref="/data/group">
+            <select1 ref="/data/group/fruit" appearance="search('fruits')">
+                <label>Select fruit</label>
+                <item>
+                    <label>name</label>
+                    <value>name_key</value>
+                </item>
+            </select1>
+            <select ref="/data/group/number" appearance="search('external_data')">
+                <label>Select numbers</label>
+                <item>
+                    <label>label</label>
+                    <value>name</value>
+                </item>
+            </select>
+        </group>
+    </h:body>
+</h:html>

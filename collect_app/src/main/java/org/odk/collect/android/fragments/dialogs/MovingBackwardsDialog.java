@@ -20,10 +20,9 @@ import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.os.Bundle;
-import android.support.v4.app.DialogFragment;
-import android.app.AlertDialog;
+import androidx.fragment.app.DialogFragment;
 
-import org.odk.collect.android.R;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public class MovingBackwardsDialog extends DialogFragment {
 
@@ -47,16 +46,16 @@ public class MovingBackwardsDialog extends DialogFragment {
     public Dialog onCreateDialog(Bundle savedInstanceState) {
         setCancelable(false);
 
-        return new AlertDialog.Builder(getActivity())
-                .setTitle(R.string.moving_backwards_disabled_title)
-                .setMessage(R.string.moving_backwards_disabled_message)
-                .setPositiveButton(R.string.yes, new DialogInterface.OnClickListener() {
+        return new MaterialAlertDialogBuilder(getActivity())
+                .setTitle(org.odk.collect.strings.R.string.moving_backwards_disabled_title)
+                .setMessage(org.odk.collect.strings.R.string.moving_backwards_disabled_message)
+                .setPositiveButton(org.odk.collect.strings.R.string.yes, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int id) {
                         listener.preventOtherWaysOfEditingForm();
                     }
                 })
-                .setNegativeButton(R.string.no, new DialogInterface.OnClickListener() {
+                .setNegativeButton(org.odk.collect.strings.R.string.no, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int id) {
                     }

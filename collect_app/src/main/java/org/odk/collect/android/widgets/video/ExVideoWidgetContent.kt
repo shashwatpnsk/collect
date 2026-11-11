@@ -1,0 +1,46 @@
+package org.odk.collect.android.widgets.video
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import org.javarosa.form.api.FormEntryPrompt
+import org.odk.collect.android.widgets.MediaWidgetAnswerViewModel
+import org.odk.collect.android.widgets.WidgetAnswer
+import org.odk.collect.android.widgets.WidgetIconButton
+import org.odk.collect.androidshared.ui.compose.marginStandard
+import org.odk.collect.strings.R.string
+
+@Composable
+fun ExVideoWidgetContent(
+    mediaWidgetAnswerViewModel: MediaWidgetAnswerViewModel,
+    formEntryPrompt: FormEntryPrompt,
+    answer: String?,
+    readOnly: Boolean,
+    buttonFontSize: Int,
+    onLaunchClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    Column {
+        if (!readOnly) {
+            WidgetIconButton(
+                Icons.AutoMirrored.Filled.OpenInNew,
+                stringResource(string.launch_app),
+                buttonFontSize,
+                onLaunchClick,
+                onLongClick
+            )
+        }
+
+        WidgetAnswer(
+            Modifier.padding(top = marginStandard()),
+            formEntryPrompt,
+            answer,
+            mediaWidgetAnswerViewModel = mediaWidgetAnswerViewModel,
+            onLongClick = onLongClick
+        )
+    }
+}

@@ -1,80 +1,73 @@
-/*
- * Copyright 2018 Nafundi
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.odk.collect.android.utilities;
 
-import android.database.Cursor;
-import android.database.MatrixCursor;
+import androidx.annotation.NonNull;
 
-import org.odk.collect.android.dao.FormsDao;
-import org.odk.collect.android.dto.Form;
-import org.odk.collect.android.provider.FormsProviderAPI;
+import org.javarosa.core.reference.ReferenceManager;
+import org.javarosa.core.reference.RootTranslator;
+import org.odk.collect.android.logic.FileReferenceFactory;
+import org.odk.collect.android.storage.StoragePathProvider;
+import org.odk.collect.forms.Form;
 
+import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 
-import static android.provider.BaseColumns._ID;
-
-public class FormUtils {
+public final class FormUtils {
 
     private FormUtils() {
+
+    }
+
+    @NonNull
+    public static List<File> getMediaFiles(@NonNull Form form) {
+        String formMediaPath = form.getFormMediaPath();
+        return formMediaPath == null
+                ? new ArrayList<>()
+                : FileUtils.listFiles(new File(formMediaPath));
     }
 
     /**
-     * Keep only newest form versions, that means if you have more than one form with given formId
-     * only the newest one should be displayed.
+     * @deprecated Use {@link FormUtils#setupReferenceManagerForForm(ReferenceManager, File, File)} instead
      */
-    public static Cursor removeOldForms(Cursor cursor) {
-        List<Form> forms = new FormsDao().getFormsFromCursor(cursor);
-
-        MatrixCursor filteredCursor = new MatrixCursor(
-                new String[] {
-                        _ID,
-                        FormsProviderAPI.FormsColumns.DISPLAY_NAME,
-                        FormsProviderAPI.FormsColumns.DISPLAY_SUBTEXT,
-                        FormsProviderAPI.FormsColumns.JR_FORM_ID,
-                        FormsProviderAPI.FormsColumns.JR_VERSION,
-                        FormsProviderAPI.FormsColumns.DATE
-                }
-        );
-
-        for (Form form : forms) {
-            if (isThisFormTheNewestOne(forms, form)) {
-                filteredCursor.addRow(new Object[] {
-                        form.getId(),
-                        form.getDisplayName(),
-                        form.getDisplaySubtext(),
-                        form.getJrFormId(),
-                        form.getJrVersion(),
-                        form.getDate()
-                });
-            }
-        }
-
-        return filteredCursor;
+    @Deprecated
+    public static void setupReferenceManagerForForm(ReferenceManager referenceManager, File formMediaDir) {
+        setupReferenceManagerForForm(referenceManager, new File(new StoragePathProvider().getProjectRootDirPath()), formMediaDir);
     }
 
-    private static boolean isThisFormTheNewestOne(List<Form> forms, Form formForChecking) {
-        for (Form form : forms) {
-            if (form.getJrFormId().equals(formForChecking.getJrFormId()) && !form.equals(formForChecking)) {
-                if (form.getDate() > formForChecking.getDate()) {
-                    return false;
-                }
-            }
-        }
+    /**
+     * Configures the given reference manager to resolve jr:// URIs to a folder in the root ODK forms
+     * directory with name matching the name of the directory represented by {@code formMediaDir}.
+     * <p>
+     * E.g. if /foo/bar/baz is passed in as {@code formMediaDir}, jr:// URIs will be resolved to
+     * projectRoot/forms/baz.
+     */
+    public static void setupReferenceManagerForForm(ReferenceManager referenceManager, File projectRootDir, File formMediaDir) {
+        referenceManager.reset();
 
-        return true;
+        // Always build URIs against the project root, regardless of the absolute path of formMediaDir
+        referenceManager.addReferenceFactory(new FileReferenceFactory(projectRootDir.getAbsolutePath()));
+
+        addSessionRootTranslators(referenceManager,
+                buildSessionRootTranslators(formMediaDir.getName(), enumerateHostStrings()));
+    }
+
+    public static String[] enumerateHostStrings() {
+        return new String[]{"images", "image", "audio", "video", "file-csv", "file"};
+    }
+
+    public static List<RootTranslator> buildSessionRootTranslators(String formMediaDir, String[] hostStrings) {
+        List<RootTranslator> rootTranslators = new ArrayList<>();
+        // Set jr://... to point to <projectRoot>/forms/formBasename-media/
+        final String translatedPrefix = String.format("jr://file/forms/" + formMediaDir + "/");
+        for (String t : hostStrings) {
+            rootTranslators.add(new RootTranslator(String.format("jr://%s/", t), translatedPrefix));
+        }
+        return rootTranslators;
+    }
+
+    public static void addSessionRootTranslators(ReferenceManager referenceManager, List<RootTranslator> rootTranslators) {
+        for (RootTranslator rootTranslator : rootTranslators) {
+            referenceManager.addSessionRootTranslator(rootTranslator);
+        }
     }
 }

@@ -1,0 +1,112 @@
+package org.odk.collect.android.widgets.utilities
+
+import android.content.Intent
+import android.os.Bundle
+import androidx.core.os.bundleOf
+import androidx.fragment.app.FragmentActivity
+import org.javarosa.form.api.FormEntryPrompt
+import org.odk.collect.android.utilities.Appearances
+import org.odk.collect.android.utilities.ApplicationConstants
+import org.odk.collect.android.utilities.FormEntryPromptUtils
+import org.odk.collect.android.widgets.geo.GeoPointMapDialogFragment
+import org.odk.collect.android.widgets.geo.GeoPolyDialogFragment
+import org.odk.collect.android.widgets.interfaces.GeoDataRequester
+import org.odk.collect.android.widgets.utilities.BindAttributes.ALLOW_MOCK_ACCURACY
+import org.odk.collect.androidshared.ui.DialogFragmentUtils
+import org.odk.collect.geo.Constants.EXTRA_RETAIN_MOCK_ACCURACY
+import org.odk.collect.geo.geopoint.GeoPointActivity
+import org.odk.collect.permissions.PermissionListener
+import org.odk.collect.permissions.PermissionsProvider
+import java.lang.Boolean.parseBoolean
+
+class ActivityGeoDataRequester(
+    private val permissionsProvider: PermissionsProvider,
+    private val activity: FragmentActivity
+) : GeoDataRequester {
+
+    override fun requestGeoPoint(
+        prompt: FormEntryPrompt,
+        waitingForDataRegistry: WaitingForDataRegistry
+    ) {
+        permissionsProvider.requestEnabledLocationPermissions(
+            activity,
+            object : PermissionListener {
+                override fun granted() {
+                    if (Appearances.isGeoPointMapAppearance(prompt) || prompt.isReadOnly) {
+                        DialogFragmentUtils.showIfNotShowing(
+                            GeoPointMapDialogFragment::class.java,
+                            bundleOf(WidgetAnswerDialogFragment.ARG_FORM_INDEX to prompt.index),
+                            activity.supportFragmentManager
+                        )
+                    } else {
+                        waitingForDataRegistry.waitForData(prompt.index)
+
+                        val bundle = Bundle().also {
+                            val accuracyThreshold =
+                                FormEntryPromptUtils.getAdditionalAttribute(
+                                    prompt,
+                                    "accuracyThreshold"
+                                )
+                            val unacceptableAccuracyThreshold =
+                                FormEntryPromptUtils.getAdditionalAttribute(
+                                    prompt,
+                                    "unacceptableAccuracyThreshold"
+                                )
+
+                            it.putFloat(
+                                GeoPointActivity.EXTRA_ACCURACY_THRESHOLD,
+                                accuracyThreshold?.toFloatOrNull() ?: DEFAULT_ACCURACY_THRESHOLD
+                            )
+
+                            it.putFloat(
+                                GeoPointActivity.EXTRA_UNACCEPTABLE_ACCURACY_THRESHOLD,
+                                unacceptableAccuracyThreshold?.toFloatOrNull()
+                                    ?: DEFAULT_UNACCEPTABLE_ACCURACY_THRESHOLD
+                            )
+
+                            it.putBoolean(EXTRA_RETAIN_MOCK_ACCURACY, getAllowMockAccuracy(prompt))
+                        }
+
+                        val intent = Intent(activity, GeoPointActivity::class.java).also {
+                            it.putExtras(bundle)
+                        }
+
+                        activity.startActivityForResult(
+                            intent,
+                            ApplicationConstants.RequestCodes.LOCATION_CAPTURE
+                        )
+                    }
+                }
+            }
+        )
+    }
+
+    override fun requestGeoPoly(prompt: FormEntryPrompt) {
+        permissionsProvider.requestEnabledLocationPermissions(
+            activity,
+            object : PermissionListener {
+                override fun granted() {
+                    DialogFragmentUtils.showIfNotShowing(
+                        GeoPolyDialogFragment::class.java,
+                        bundleOf(WidgetAnswerDialogFragment.ARG_FORM_INDEX to prompt.index),
+                        activity.supportFragmentManager
+                    )
+                }
+            }
+        )
+    }
+
+    private fun getAllowMockAccuracy(prompt: FormEntryPrompt): Boolean {
+        return parseBoolean(
+            FormEntryPromptUtils.getBindAttribute(
+                prompt,
+                ALLOW_MOCK_ACCURACY
+            )
+        )
+    }
+
+    companion object {
+        const val DEFAULT_ACCURACY_THRESHOLD = 5f
+        const val DEFAULT_UNACCEPTABLE_ACCURACY_THRESHOLD = 100f
+    }
+}

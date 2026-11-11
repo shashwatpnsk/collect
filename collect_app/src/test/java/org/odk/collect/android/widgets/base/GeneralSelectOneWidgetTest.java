@@ -1,6 +1,7 @@
 package org.odk.collect.android.widgets.base;
 
-import android.support.annotation.NonNull;
+
+import androidx.annotation.NonNull;
 
 import org.javarosa.core.model.SelectChoice;
 import org.javarosa.core.model.data.IAnswerData;
@@ -35,7 +36,7 @@ public abstract class GeneralSelectOneWidgetTest<W extends MultiChoiceWidget>
 
     @Test
     public void getAnswerShouldReflectTheCurrentlySelectedChoice() {
-        W widget = getWidget();
+        W widget = getSpyWidget();
         assertNull(widget.getAnswer());
 
         List<SelectChoice> selectChoices = getSelectChoices();

@@ -15,151 +15,119 @@
 package org.odk.collect.android.widgets;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.Context;
-import android.support.annotation.NonNull;
-import android.text.Selection;
-import android.text.method.TextKeyListener;
-import android.text.method.TextKeyListener.Capitalize;
-import android.util.TypedValue;
-import android.view.Gravity;
-import android.view.KeyEvent;
-import android.widget.EditText;
-import android.widget.TableLayout;
+import android.view.View;
+import android.view.ViewGroup;
+
+import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 
 import org.javarosa.core.model.data.IAnswerData;
 import org.javarosa.core.model.data.StringData;
 import org.javarosa.form.api.FormEntryPrompt;
-import org.odk.collect.android.utilities.SoftKeyboardUtils;
-import org.odk.collect.android.utilities.ViewIds;
-
-import timber.log.Timber;
+import org.odk.collect.android.R;
+import org.odk.collect.android.formentry.questions.QuestionDetails;
+import org.odk.collect.android.utilities.Appearances;
+import org.odk.collect.android.views.WidgetAnswerText;
+import org.odk.collect.android.widgets.utilities.QuestionFontSizeUtils;
+import org.odk.collect.android.widgets.utilities.StringWidgetUtils;
 
 /**
  * The most basic widget that allows for entry of any text.
- *
- * @author Carl Hartung (carlhartung@gmail.com)
- * @author Yaw Anokwa (yanokwa@gmail.com)
  */
 @SuppressLint("ViewConstructor")
 public class StringWidget extends QuestionWidget {
-    private static final String ROWS = "rows";
-    boolean readOnly;
-    private final EditText answerText;
+    public final WidgetAnswerText widgetAnswerText;
 
-    protected StringWidget(Context context, FormEntryPrompt prompt, boolean readOnlyOverride) {
-        super(context, prompt);
+    protected StringWidget(Context context, QuestionDetails questionDetails, Dependencies dependencies) {
+        super(context, dependencies, questionDetails);
 
-        answerText = new EditText(context);
-        answerText.setId(ViewIds.generateViewId());
-        readOnly = prompt.isReadOnly() || readOnlyOverride;
+        widgetAnswerText = new WidgetAnswerText(context);
+        widgetAnswerText.init(
+                QuestionFontSizeUtils.getFontSize(settings, QuestionFontSizeUtils.FontSize.HEADLINE_6),
+                questionDetails.isReadOnly(),
+                StringWidgetUtils.getNumberOfRows(questionDetails.getPrompt()),
+                Appearances.isMultiline(questionDetails.getPrompt()),
+                Appearances.isMasked(questionDetails.getPrompt()),
+                this::widgetValueChanged
+        );
 
-        answerText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, getAnswerFontSize());
+        render();
+    }
 
-        TableLayout.LayoutParams params = new TableLayout.LayoutParams();
-
-        /*
-         * If a 'rows' attribute is on the input tag, set the minimum number of lines
-         * to display in the field to that value.
-         *
-         * I.e.,
-         * <input ref="foo" rows="5">
-         *   ...
-         * </input>
-         *
-         * will set the height of the EditText box to 5 rows high.
-         */
-        String height = prompt.getQuestion().getAdditionalAttribute(null, ROWS);
-        if (height != null && height.length() != 0) {
-            try {
-                int rows = Integer.parseInt(height);
-                answerText.setMinLines(rows);
-                answerText.setGravity(
-                        Gravity.TOP); // to write test starting at the top of the edit area
-            } catch (Exception e) {
-                Timber.e("Unable to process the rows setting for the answerText field: %s", e.toString());
-            }
-        }
-
-        params.setMargins(7, 5, 7, 5);
-        answerText.setLayoutParams(params);
-
-        // capitalize the first letter of the sentence
-        answerText.setKeyListener(new TextKeyListener(Capitalize.SENTENCES, false));
-
-        // needed to make long read only text scroll
-        answerText.setHorizontallyScrolling(false);
-        answerText.setSingleLine(false);
-
-        String s = prompt.getAnswerText();
-        if (s != null) {
-            answerText.setText(s);
-            Selection.setSelection(answerText.getText(), answerText.getText().toString().length());
-        }
-
-        if (readOnly) {
-            answerText.setBackground(null);
-            answerText.setEnabled(false);
-            answerText.setTextColor(themeUtils.getPrimaryTextColor());
-            answerText.setFocusable(false);
-        }
-
-        addAnswerView(answerText);
+    @Override
+    protected View onCreateWidgetView(@NonNull Context context, @NonNull FormEntryPrompt prompt, int answerFontSize) {
+        setDisplayValueFromModel();
+        return widgetAnswerText;
     }
 
     @Override
     public void clearAnswer() {
-        answerText.setText(null);
-    }
-
-    public EditText getAnswerTextField() {
-        return answerText;
+        widgetAnswerText.clearAnswer();
     }
 
     @Override
     public IAnswerData getAnswer() {
-        clearFocus();
-
-        String s = getAnswerText();
-        return !s.equals("") ? new StringData(s) : null;
+        String answer = getAnswerText();
+        return !answer.isEmpty() ? new StringData(answer) : null;
     }
 
     @NonNull
     public String getAnswerText() {
-        return answerText.getText().toString();
+        return widgetAnswerText.getAnswer();
     }
 
     @Override
     public void setFocus(Context context) {
-        if (!readOnly) {
-            SoftKeyboardUtils.showSoftKeyboard(answerText);
-            /*
-             * If you do a multi-question screen after a "add another group" dialog, this won't
-             * automatically pop up. It's an Android issue.
-             *
-             * That is, if I have an edit text in an activity, and pop a dialog, and in that
-             * dialog's button's OnClick() I call edittext.requestFocus() and
-             * showSoftInput(edittext, 0), showSoftinput() returns false. However, if the edittext
-             * is focused before the dialog pops up, everything works fine. great.
-             */
-        } else {
-            SoftKeyboardUtils.hideSoftKeyboard(answerText);
-        }
-    }
-
-    @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        return !event.isAltPressed() && super.onKeyDown(keyCode, event);
+        widgetAnswerText.setFocus(!questionDetails.isReadOnly());
     }
 
     @Override
     public void setOnLongClickListener(OnLongClickListener l) {
-        answerText.setOnLongClickListener(l);
+        widgetAnswerText.setOnLongClickListener(l);
     }
 
     @Override
     public void cancelLongPress() {
         super.cancelLongPress();
-        answerText.cancelLongPress();
+        widgetAnswerText.cancelLongPress();
     }
 
+    /**
+     * Registers all subviews except for the answer_container (which contains the EditText) to clear on long press.
+     * This makes it possible to long-press to paste or perform other text editing functions.
+     */
+    @Override
+    protected void registerToClearAnswerOnLongPress(Activity activity, ViewGroup viewGroup) {
+        ViewGroup view = findViewById(R.id.question_widget_container);
+        for (int i = 0; i < view.getChildCount(); i++) {
+            View childView = view.getChildAt(i);
+            if (childView.getId() != R.id.answer_container) {
+                childView.setTag(childView.getId());
+                childView.setId(getId());
+                activity.registerForContextMenu(childView);
+            }
+        }
+    }
+
+    public void setDisplayValueFromModel() {
+        String currentAnswer = getFormEntryPrompt().getAnswerText();
+
+        if (currentAnswer != null) {
+            widgetAnswerText.setAnswer(currentAnswer);
+        }
+    }
+
+    @Override
+    public void hideError() {
+        widgetAnswerText.setError(null);
+        setBackground(null);
+    }
+
+    @Override
+    public void displayError(String errorMessage) {
+        widgetAnswerText.setError(errorMessage);
+        setBackground(ContextCompat.getDrawable(getContext(), R.drawable.question_with_error_border));
+    }
 }

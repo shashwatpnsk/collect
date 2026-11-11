@@ -1,0 +1,275 @@
+package org.odk.collect.android.widgets.geo
+
+import android.app.Application
+import android.content.ComponentName
+import android.graphics.Bitmap
+import android.view.View
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.test.core.app.ApplicationProvider.getApplicationContext
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.hamcrest.MatcherAssert.assertThat
+import org.hamcrest.Matchers.equalTo
+import org.javarosa.core.model.Constants
+import org.javarosa.core.model.data.StringData
+import org.javarosa.form.api.FormEntryPrompt
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
+import org.odk.collect.android.formentry.questions.QuestionDetails
+import org.odk.collect.android.support.MockFormEntryPromptBuilder
+import org.odk.collect.android.support.WidgetTestActivity
+import org.odk.collect.android.widgets.MediaWidgetAnswerViewModel
+import org.odk.collect.android.widgets.QuestionWidget
+import org.odk.collect.android.widgets.interfaces.GeoDataRequester
+import org.odk.collect.android.widgets.support.GeoWidgetHelpers.stringFromDoubleList
+import org.odk.collect.android.widgets.support.QuestionWidgetHelpers.promptWithAnswer
+import org.odk.collect.android.widgets.support.QuestionWidgetHelpers.promptWithReadOnly
+import org.odk.collect.android.widgets.support.QuestionWidgetHelpers.promptWithReadOnlyAndAnswer
+import org.odk.collect.androidtest.onNodeWithClickLabel
+import org.odk.collect.geo.geopoly.GeoPolyUtils
+import org.odk.collect.maplibre.staticmap.StaticMapCache
+import org.odk.collect.maplibre.staticmap.StaticMapConfiguration
+import org.odk.collect.maplibre.staticmap.StaticMapLoader
+import org.odk.collect.maps.traces.LineDescription
+import org.odk.collect.maps.traces.PolygonDescription
+import org.odk.collect.maps.traces.TraceDescription
+import org.odk.collect.settings.InMemSettingsProvider
+import org.odk.collect.settings.keys.ProjectKeys
+import org.odk.collect.strings.R.string
+import org.robolectric.Shadows.shadowOf
+
+@RunWith(AndroidJUnit4::class)
+class GeoPolyWidgetTest {
+    init {
+        shadowOf(getApplicationContext<Application>().packageManager)
+            .addActivityIfNotPresent(ComponentName(getApplicationContext(), WidgetTestActivity::class.java))
+    }
+
+    @get:Rule
+    val composeRule = createAndroidComposeRule<WidgetTestActivity>()
+
+    private val answer = stringFromDoubleList()
+
+    private val geoDataRequester = mock<GeoDataRequester>()
+
+    private val staticMapLoader = FakeStaticMapLoader()
+
+    @Test
+    fun `#getAnswer returns null when there is no answer`() {
+        val widget = createWidget(promptWithAnswer(null))
+        assertThat(widget.answer, equalTo(null))
+    }
+
+    @Test
+    fun `#getAnswer returns the answer when there is one`() {
+        val widget = createWidget(promptWithAnswer(StringData(answer)))
+        assertThat(widget.answer!!.displayText, equalTo(answer))
+    }
+
+    @Test
+    fun `the answer is not displayed when there is no answer`() {
+        createWidget(promptWithAnswer(null))
+        composeRule.onNodeWithText(answer).assertDoesNotExist()
+    }
+
+    @Test
+    fun `the answer is displayed when there is one`() {
+        createWidget(promptWithAnswer(StringData(answer)))
+        composeRule.onNodeWithText(answer).assertIsDisplayed()
+    }
+
+    @Test
+    fun `the map preview is displayed instead of the answer when it can be rendered`() {
+        staticMapLoader.bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        createWidget(promptWithAnswer(StringData(answer)))
+        composeRule.onNodeWithTag(StaticMapSemantics.TAG).assertIsDisplayed()
+        composeRule.onNodeWithText(answer).assertDoesNotExist()
+    }
+
+    @Test
+    fun `the answer is displayed instead of the map preview when it can't be rendered`() {
+        createWidget(promptWithAnswer(StringData(answer)))
+        composeRule.onNodeWithTag(StaticMapSemantics.TAG).assertDoesNotExist()
+        composeRule.onNodeWithText(answer).assertIsDisplayed()
+    }
+
+    @Test
+    fun `the answer is displayed instead of the map preview when it is out of map bounds`() {
+        val answer = "100.0 10.0 0.0 0.0;101.0 11.0 0.0 0.0"
+        staticMapLoader.bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        createWidget(promptWithAnswer(StringData(answer)))
+        composeRule.onNodeWithTag(StaticMapSemantics.TAG).assertDoesNotExist()
+        composeRule.onNodeWithText(answer).assertIsDisplayed()
+    }
+
+    @Test
+    fun `a geotrace answer is shown on the map as a line`() {
+        staticMapLoader.bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        createWidget(promptWithAnswer(StringData(answer)), Constants.DATATYPE_GEOTRACE)
+        composeRule.onNodeWithTag(StaticMapSemantics.TAG)
+            .assert(SemanticsMatcher.expectValue(StaticMapSemantics.traceProperty, LineDescription(GeoPolyUtils.parseGeometry(answer))))
+    }
+
+    @Test
+    fun `a geoshape answer is shown on the map as a polygon`() {
+        staticMapLoader.bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        createWidget(promptWithAnswer(StringData(answer)), Constants.DATATYPE_GEOSHAPE)
+        composeRule.onNodeWithTag(StaticMapSemantics.TAG)
+            .assert(SemanticsMatcher.expectValue(StaticMapSemantics.traceProperty, PolygonDescription(GeoPolyUtils.parseGeometry(answer))))
+    }
+
+    @Test
+    fun `the button is hidden when the question is read-only and there is no answer`() {
+        createWidget(promptWithReadOnly())
+        composeRule.onNodeWithClickLabel(string.view_line).assertDoesNotExist()
+    }
+
+    @Test
+    fun `the button has correct text for a geotrace when the question is read-only and there is an answer`() {
+        createWidget(promptWithReadOnlyAndAnswer(StringData(answer)), Constants.DATATYPE_GEOTRACE)
+        composeRule.onNodeWithClickLabel(string.view_line).assertIsDisplayed()
+    }
+
+    @Test
+    fun `the button has correct text for a geotrace when the question is not read-only and there is no answer`() {
+        createWidget(promptWithAnswer(null), Constants.DATATYPE_GEOTRACE)
+        composeRule.onNodeWithClickLabel(string.get_line).assertIsDisplayed()
+    }
+
+    @Test
+    fun `the button has correct text for a geotrace when the question is not read-only and there is an answer`() {
+        createWidget(promptWithAnswer(StringData(answer)), Constants.DATATYPE_GEOTRACE)
+        composeRule.onNodeWithClickLabel(string.view_or_change_line).assertIsDisplayed()
+    }
+
+    @Test
+    fun `the button has correct text for a geoshape when the question is read-only and there is an answer`() {
+        createWidget(promptWithReadOnlyAndAnswer(StringData(answer)), Constants.DATATYPE_GEOSHAPE)
+        composeRule.onNodeWithClickLabel(string.view_polygon).assertIsDisplayed()
+    }
+
+    @Test
+    fun `the button has correct text for a geoshape when the question is not read-only and there is no answer`() {
+        createWidget(promptWithAnswer(null), Constants.DATATYPE_GEOSHAPE)
+        composeRule.onNodeWithClickLabel(string.get_polygon).assertIsDisplayed()
+    }
+
+    @Test
+    fun `the button has correct text for a geoshape when the question is not read-only and there is an answer`() {
+        createWidget(promptWithAnswer(StringData(answer)), Constants.DATATYPE_GEOSHAPE)
+        composeRule.onNodeWithClickLabel(string.view_or_change_polygon).assertIsDisplayed()
+    }
+
+    @Test
+    fun `clicking the button requests a geopoly`() {
+        val prompt = promptWithAnswer(null)
+        createWidget(prompt)
+
+        composeRule.onNodeWithClickLabel(string.get_line).performClick()
+
+        verify(geoDataRequester).requestGeoPoly(prompt)
+    }
+
+    @Test
+    fun `clicking the button requests a geopoly when there is an answer`() {
+        val prompt = promptWithAnswer(StringData(answer))
+        createWidget(prompt)
+
+        composeRule.onNodeWithClickLabel(string.view_or_change_line).performClick()
+
+        verify(geoDataRequester).requestGeoPoly(prompt)
+    }
+
+    @Test
+    fun `clicking the map preview requests a geopoly`() {
+        staticMapLoader.bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        val prompt = promptWithAnswer(StringData(answer))
+        createWidget(prompt)
+
+        composeRule.onNodeWithTag(StaticMapSemantics.TAG).performClick()
+
+        verify(geoDataRequester).requestGeoPoly(prompt)
+    }
+
+    @Test
+    fun `clicking the answer requests a geopoly when the map preview can't be rendered`() {
+        val prompt = promptWithAnswer(StringData(answer))
+        createWidget(prompt)
+
+        composeRule.onNodeWithText(answer).performClick()
+
+        verify(geoDataRequester).requestGeoPoly(prompt)
+    }
+
+    @Test
+    fun `long pressing the button or the answer shows the context menu`() {
+        val widget = createWidget(promptWithAnswer(StringData(answer)))
+        val listener = mock<View.OnCreateContextMenuListener>()
+        widget.setOnCreateContextMenuListener(listener)
+
+        composeRule.onNodeWithClickLabel(string.view_or_change_line).performTouchInput { longClick() }
+        composeRule.onNodeWithText(answer).performTouchInput { longClick() }
+
+        verify(listener, times(2)).onCreateContextMenu(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `long pressing the map preview shows the context menu`() {
+        staticMapLoader.bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        val widget = createWidget(promptWithAnswer(StringData(answer)))
+        val listener = mock<View.OnCreateContextMenuListener>()
+        widget.setOnCreateContextMenuListener(listener)
+
+        composeRule.onNodeWithTag(StaticMapSemantics.TAG).performTouchInput { longClick() }
+
+        verify(listener).onCreateContextMenu(any(), any(), anyOrNull())
+    }
+
+    private fun createWidget(prompt: FormEntryPrompt, dataType: Int = Constants.DATATYPE_GEOTRACE): GeoPolyWidget {
+        val settingsProvider = InMemSettingsProvider().also {
+            it.getUnprotectedSettings().save(ProjectKeys.KEY_BASEMAP_SOURCE, "blah")
+        }
+
+        return GeoPolyWidget(
+            composeRule.activity,
+            QuestionDetails(asGeoPolyQuestion(prompt, dataType)),
+            geoDataRequester,
+            QuestionWidget.Dependencies(mock(), MediaWidgetAnswerViewModel(mock(), mock(), mock(), settingsProvider, mock())),
+            staticMapLoader
+        ).also {
+            composeRule.activity.setContentView(it)
+        }
+    }
+
+    private fun asGeoPolyQuestion(prompt: FormEntryPrompt, dataType: Int) = MockFormEntryPromptBuilder(prompt)
+        .withControlType(Constants.CONTROL_INPUT)
+        .withDataType(dataType)
+        .build()
+
+    private class FakeStaticMapLoader : StaticMapLoader {
+        var bitmap: Bitmap? = null
+
+        override suspend fun load(
+            configuration: StaticMapConfiguration,
+            cache: StaticMapCache,
+            trace: TraceDescription,
+            width: Int,
+            height: Int
+        ): Bitmap? {
+            return bitmap
+        }
+    }
+}

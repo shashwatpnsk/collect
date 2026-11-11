@@ -18,51 +18,55 @@ package org.odk.collect.android.widgets;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
-import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
 import android.net.Uri;
-import android.provider.MediaStore;
-import android.support.annotation.IdRes;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.util.DisplayMetrics;
 import android.view.View;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.IdRes;
+import androidx.annotation.Nullable;
+
 import org.javarosa.core.model.data.IAnswerData;
 import org.javarosa.core.model.data.StringData;
-import org.javarosa.form.api.FormEntryPrompt;
-import org.odk.collect.android.R;
-import org.odk.collect.android.activities.DrawActivity;
-import org.odk.collect.android.application.Collect;
+import org.javarosa.core.reference.InvalidReferenceException;
+import org.odk.collect.draw.DrawActivity;
+import org.odk.collect.android.formentry.questions.QuestionDetails;
 import org.odk.collect.android.utilities.ApplicationConstants;
-import org.odk.collect.android.utilities.FileUtils;
-import org.odk.collect.android.utilities.MediaManager;
-import org.odk.collect.android.utilities.MediaUtils;
-import org.odk.collect.android.utilities.ViewIds;
+import org.odk.collect.android.utilities.QuestionMediaManager;
+import org.odk.collect.android.utilities.QuestionMediaManagerKt;
 import org.odk.collect.android.widgets.interfaces.FileWidget;
+import org.odk.collect.android.widgets.interfaces.WidgetDataReceiver;
+import org.odk.collect.android.widgets.utilities.WaitingForDataRegistry;
+import org.odk.collect.androidshared.ui.multiclicksafe.MultiClickGuard;
+import org.odk.collect.imageloader.GlideImageLoader;
 
 import java.io.File;
 
 import timber.log.Timber;
 
-public abstract class BaseImageWidget extends QuestionWidget implements FileWidget {
-    @Nullable
+public abstract class BaseImageWidget extends QuestionWidget implements FileWidget, WidgetDataReceiver {
+
     protected ImageView imageView;
     protected String binaryName;
     protected TextView errorTextView;
-    protected LinearLayout answerLayout;
-
     protected ImageClickHandler imageClickHandler;
     protected ExternalImageCaptureHandler imageCaptureHandler;
 
-    public BaseImageWidget(Context context, FormEntryPrompt prompt) {
-        super(context, prompt);
+    private final WaitingForDataRegistry waitingForDataRegistry;
+    protected final QuestionMediaManager questionMediaManager;
+    protected final String tmpImageFilePath;
+
+    public BaseImageWidget(Context context, QuestionDetails prompt, QuestionMediaManager questionMediaManager,
+                           WaitingForDataRegistry waitingForDataRegistry, String tmpImageFilePath, Dependencies dependencies) {
+        super(context, dependencies, prompt);
+        this.questionMediaManager = questionMediaManager;
+        this.waitingForDataRegistry = waitingForDataRegistry;
+        this.tmpImageFilePath = tmpImageFilePath;
+
+        binaryName = getFormEntryPrompt().getAnswerText();
     }
 
     @Override
@@ -73,56 +77,36 @@ public abstract class BaseImageWidget extends QuestionWidget implements FileWidg
     @Override
     public void clearAnswer() {
         deleteFile();
-        if (imageView != null) {
-            imageView.setImageDrawable(null);
-        }
-
+        imageView.setImageDrawable(null);
+        imageView.setVisibility(View.GONE);
         errorTextView.setVisibility(View.GONE);
+        widgetValueChanged();
     }
 
     @Override
     public void deleteFile() {
-        MediaManager
-                .INSTANCE
-                .markOriginalFileOrDelete(getFormEntryPrompt().getIndex().toString(),
-                        getInstanceFolder() + File.separator + binaryName);
+        questionMediaManager.deleteAnswerFile(getFormEntryPrompt().getIndex().toString(), binaryName);
         binaryName = null;
     }
 
     @Override
-    public void setBinaryData(Object newImageObj) {
-        // you are replacing an answer. delete the previous image using the
-        // content provider.
+    public void setData(Object object) {
         if (binaryName != null) {
             deleteFile();
         }
 
-        File newImage = (File) newImageObj;
-        if (newImage.exists()) {
-            // Add the new image to the Media content provider so that the
-            // viewing is fast in Android 2.0+
-            ContentValues values = new ContentValues(6);
-            values.put(MediaStore.Images.Media.TITLE, newImage.getName());
-            values.put(MediaStore.Images.Media.DISPLAY_NAME, newImage.getName());
-            values.put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis());
-            values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
-            values.put(MediaStore.Images.Media.DATA, newImage.getAbsolutePath());
-
-            MediaManager
-                    .INSTANCE
-                    .replaceRecentFileForQuestion(getFormEntryPrompt().getIndex().toString(), newImage.getAbsolutePath());
-
-            Uri imageURI = getContext().getContentResolver().insert(
-                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-
-            if (imageURI != null) {
-                Timber.i("Inserting image returned uri = %s", imageURI.toString());
+        if (object instanceof File) {
+            File newImage = (File) object;
+            if (newImage.exists()) {
+                questionMediaManager.replaceAnswerFile(getFormEntryPrompt().getIndex().toString(), newImage.getAbsolutePath());
+                binaryName = newImage.getName();
+                updateAnswer();
+                widgetValueChanged();
+            } else {
+                Timber.e(new Error("NO IMAGE EXISTS at: " + newImage.getAbsolutePath()));
             }
-
-            binaryName = newImage.getName();
-            Timber.i("Setting current answer to %s", newImage.getName());
         } else {
-            Timber.e("NO IMAGE EXISTS at: %s", newImage.getAbsolutePath());
+            Timber.e(new Error("ImageWidget's setBinaryData must receive a File object."));
         }
     }
 
@@ -141,46 +125,25 @@ public abstract class BaseImageWidget extends QuestionWidget implements FileWidg
         }
     }
 
-    protected void setUpBinary() {
-        if (binaryName != null) {
-            DisplayMetrics metrics = getContext().getResources().getDisplayMetrics();
-            int screenWidth = metrics.widthPixels;
-            int screenHeight = metrics.heightPixels;
+    protected void updateAnswer() {
+        imageView.setVisibility(View.GONE);
+        errorTextView.setVisibility(View.GONE);
 
-            File f = new File(getInstanceFolder() + File.separator + binaryName);
-
-            Bitmap bmp = null;
-            if (f.exists()) {
-                bmp = FileUtils.getBitmapScaledToDisplay(f, screenHeight, screenWidth);
-                if (bmp == null) {
+        File file = QuestionMediaManagerKt.getExistingAnswerFile(questionMediaManager, binaryName);
+        if (file != null) {
+            imageView.setVisibility(View.VISIBLE);
+            imageLoader.loadImage(imageView, file, ImageView.ScaleType.FIT_CENTER, new GlideImageLoader.ImageLoaderCallback() {
+                @Override
+                public void onLoadFailed() {
+                    imageView.setVisibility(View.GONE);
                     errorTextView.setVisibility(View.VISIBLE);
                 }
-            }
-
-            imageView = getAnswerImageView(bmp);
-            imageView.setOnClickListener(new View.OnClickListener() {
 
                 @Override
-                public void onClick(View v) {
-                    if (imageClickHandler != null) {
-                        imageClickHandler.clickImage("viewImage");
-                    }
+                public void onLoadSucceeded() {
                 }
             });
-
-        answerLayout.addView(imageView);
         }
-    }
-
-    protected void setUpLayout() {
-        errorTextView = new TextView(getContext());
-        errorTextView.setId(ViewIds.generateViewId());
-        errorTextView.setText(R.string.selected_invalid_image);
-
-        answerLayout = new LinearLayout(getContext());
-        answerLayout.setOrientation(LinearLayout.VERTICAL);
-
-        binaryName = getFormEntryPrompt().getAnswerText();
     }
 
     /**
@@ -189,39 +152,13 @@ public abstract class BaseImageWidget extends QuestionWidget implements FileWidg
      * @param intent to add extras
      * @return intent with added extras
      */
-    public abstract Intent addExtrasToIntent(@NonNull Intent intent);
+    public abstract Intent addExtrasToIntent(Intent intent);
 
     /**
      * Interface for Clicking on Images
      */
     protected interface ImageClickHandler {
         void clickImage(String context);
-    }
-
-    /**
-     * Class to implement launching of viewing an image Activity
-     */
-    protected class ViewImageClickHandler implements ImageClickHandler {
-
-        @Override
-        public void clickImage(String context) {
-            Intent i = new Intent("android.intent.action.VIEW");
-            Uri uri = MediaUtils.getImageUriFromMediaProvider(
-                    getInstanceFolder() + File.separator + binaryName);
-            if (uri != null) {
-                Timber.i("setting view path to: %s", uri.toString());
-                i.setDataAndType(uri, "image/*");
-
-                try {
-                    getContext().startActivity(i);
-                } catch (ActivityNotFoundException e) {
-                    Toast.makeText(getContext(),
-                            getContext().getString(R.string.activity_not_found,
-                                    getContext().getString(R.string.view_image)),
-                            Toast.LENGTH_SHORT).show();
-                }
-            }
-        }
     }
 
     /**
@@ -241,21 +178,20 @@ public abstract class BaseImageWidget extends QuestionWidget implements FileWidg
 
         @Override
         public void clickImage(String context) {
-            if (Collect.allowClick(getClass().getName())) {
+            if (MultiClickGuard.allowClick(getClass().getName())) {
                 launchDrawActivity();
             }
         }
 
         private void launchDrawActivity() {
-            errorTextView.setVisibility(View.GONE);
             Intent i = new Intent(getContext(), DrawActivity.class);
             i.putExtra(DrawActivity.OPTION, drawOption);
-            // copy...
-            if (binaryName != null) {
-                File f = new File(getInstanceFolder() + File.separator + binaryName);
-                i.putExtra(DrawActivity.REF_IMAGE, Uri.fromFile(f));
+            File file = getAnswerOrDefaultImageFile();
+            if (file != null && file.exists()) {
+                i.putExtra(DrawActivity.REF_IMAGE, Uri.fromFile(file));
             }
-            i.putExtra(DrawActivity.EXTRA_OUTPUT, Uri.fromFile(new File(Collect.TMPFILE_PATH)));
+
+            i.putExtra(DrawActivity.EXTRA_OUTPUT, Uri.fromFile(new File(tmpImageFilePath)));
             i = addExtrasToIntent(i);
             launchActivityForResult(i, requestCode, stringResourceId);
         }
@@ -282,7 +218,6 @@ public abstract class BaseImageWidget extends QuestionWidget implements FileWidg
 
         @Override
         public void chooseImage(@IdRes final int stringResource) {
-            errorTextView.setVisibility(View.GONE);
             Intent i = new Intent(Intent.ACTION_GET_CONTENT);
             i.setType("image/*");
             launchActivityForResult(i, ApplicationConstants.RequestCodes.IMAGE_CHOOSER, stringResource);
@@ -292,19 +227,52 @@ public abstract class BaseImageWidget extends QuestionWidget implements FileWidg
     /**
      * Standard method for launching an Activity.
      *
-     * @param intent - The Intent to start
-     * @param resourceCode - Code to return when Activity exits
+     * @param intent              - The Intent to start
+     * @param resourceCode        - Code to return when Activity exits
      * @param errorStringResource - String resource for error toast
      */
     protected void launchActivityForResult(Intent intent, final int resourceCode, final int errorStringResource) {
         try {
-            waitForData();
+            waitingForDataRegistry.waitForData(getFormEntryPrompt().getIndex());
             ((Activity) getContext()).startActivityForResult(intent, resourceCode);
         } catch (ActivityNotFoundException e) {
             Toast.makeText(getContext(),
-                    getContext().getString(R.string.activity_not_found, getContext().getString(errorStringResource)),
+                    getContext().getString(org.odk.collect.strings.R.string.activity_not_found, getContext().getString(errorStringResource)),
                     Toast.LENGTH_SHORT).show();
-            cancelWaitingForData();
+            waitingForDataRegistry.cancelWaitingForData();
         }
+    }
+
+    @Nullable
+    protected File getAnswerOrDefaultImageFile() {
+        if (binaryName == null) {
+            return null;
+        }
+
+        File answerFile = QuestionMediaManagerKt.getExistingAnswerFile(questionMediaManager, binaryName);
+        if (answerFile == null) {
+            String filePath = getDefaultFilePath();
+            return filePath != null ? new File(filePath) : null;
+        }
+
+        return answerFile;
+    }
+
+    private String getDefaultFilePath() {
+        try {
+            return referenceManager.deriveReference(binaryName).getLocalURI();
+        } catch (InvalidReferenceException e) {
+            Timber.w(e);
+        }
+
+        return null;
+    }
+
+    public ImageView getImageView() {
+        return imageView;
+    }
+
+    public TextView getErrorTextView() {
+        return errorTextView;
     }
 }

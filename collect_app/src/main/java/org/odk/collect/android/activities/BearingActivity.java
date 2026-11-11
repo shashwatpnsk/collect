@@ -16,18 +16,19 @@ package org.odk.collect.android.activities;
 
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
-import android.content.Intent;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
 
-import org.odk.collect.android.R;
+import org.odk.collect.android.views.DayNightProgressDialog;
+import org.odk.collect.externalapp.ExternalAppUtils;
+import org.odk.collect.strings.localization.LocalizedActivity;
 
 import java.util.Locale;
 
-public class BearingActivity extends CollectAbstractActivity implements SensorEventListener {
+public class BearingActivity extends LocalizedActivity implements SensorEventListener {
     private ProgressDialog bearingDialog;
 
     private SensorManager sensorManager;
@@ -42,7 +43,7 @@ public class BearingActivity extends CollectAbstractActivity implements SensorEv
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setTitle(getString(R.string.get_bearing));
+        setTitle(getString(org.odk.collect.strings.R.string.get_bearing));
 
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
@@ -77,7 +78,7 @@ public class BearingActivity extends CollectAbstractActivity implements SensorEv
      */
     private void setupBearingDialog() {
         // dialog displayed while fetching bearing
-        bearingDialog = new ProgressDialog(this);
+        bearingDialog = new DayNightProgressDialog(this);
         DialogInterface.OnClickListener geopointButtonListener =
                 new DialogInterface.OnClickListener() {
                     @Override
@@ -97,25 +98,22 @@ public class BearingActivity extends CollectAbstractActivity implements SensorEv
         // back button doesn't cancel
         bearingDialog.setCancelable(false);
         bearingDialog.setIndeterminate(true);
-        bearingDialog.setIcon(android.R.drawable.ic_dialog_info);
-        bearingDialog.setTitle(getString(R.string.getting_bearing));
-        bearingDialog.setMessage(getString(R.string.please_wait_long));
+        bearingDialog.setTitle(getString(org.odk.collect.strings.R.string.getting_bearing));
+        bearingDialog.setMessage(getString(org.odk.collect.strings.R.string.please_wait_long));
         bearingDialog.setButton(DialogInterface.BUTTON_POSITIVE,
-                getString(R.string.accept_bearing),
+                getString(org.odk.collect.strings.R.string.accept_bearing),
                 geopointButtonListener);
         bearingDialog.setButton(DialogInterface.BUTTON_NEGATIVE,
-                getString(R.string.cancel_location),
+                getString(org.odk.collect.strings.R.string.cancel_location),
                 geopointButtonListener);
     }
 
     private void returnBearing() {
         if (bearingDecimal != null) {
-            Intent i = new Intent();
-            i.putExtra(
-                    FormEntryActivity.BEARING_RESULT, bearingDecimal);
-            setResult(RESULT_OK, i);
+            ExternalAppUtils.returnSingleValue(this, bearingDecimal);
+        } else {
+            finish();
         }
-        finish();
     }
 
     @Override
@@ -171,8 +169,8 @@ public class BearingActivity extends CollectAbstractActivity implements SensorEv
                 } else if (degrees > 292.5 && degrees <= 337.5) {
                     dir = "NW";
                 }
-                bearingDialog.setMessage(getString(R.string.direction, dir)
-                        + "\n" + getString(R.string.bearing, degrees));
+                bearingDialog.setMessage(getString(org.odk.collect.strings.R.string.direction, dir)
+                        + "\n" + getString(org.odk.collect.strings.R.string.bearing, degrees));
 
             }
         }

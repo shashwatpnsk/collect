@@ -1,0 +1,86 @@
+package org.odk.collect.android.support.pages;
+
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
+
+import org.odk.collect.android.R;
+import org.odk.collect.testshared.AssertionFramework;
+
+public class FormEndPage extends Page<FormEndPage> {
+
+    private final String formName;
+
+    public FormEndPage(String formName) {
+        this.formName = formName;
+    }
+
+    @Override
+    public FormEndPage assertOnPage() {
+        assertText(org.odk.collect.strings.R.string.save_enter_data_description, AssertionFramework.COMPOSE, formName);
+        return this;
+    }
+
+    public <D extends Page<D>> D clickSaveAsDraft(D destination) {
+        return clickOnString(org.odk.collect.strings.R.string.save_as_draft, destination, AssertionFramework.COMPOSE);
+    }
+
+    public MainMenuPage clickSaveAsDraft() {
+        return clickSaveAsDraft(new MainMenuPage());
+    }
+
+    public FormEndPage clickSaveAsDraftWithError(String errorMsg) {
+        clickOnString(org.odk.collect.strings.R.string.save_as_draft, this, AssertionFramework.COMPOSE);
+        checkIsToastWithMessageDisplayed(errorMsg);
+        return this;
+    }
+
+    public <D extends Page<D>> D clickFinalize(D destination) {
+        return clickOnString(org.odk.collect.strings.R.string.finalize, destination, AssertionFramework.COMPOSE);
+    }
+
+    public MainMenuPage clickFinalize() {
+        return clickFinalize(new MainMenuPage());
+    }
+
+    public FormEndPage clickFinalizeWithError(String errorMsg) {
+        clickOnString(org.odk.collect.strings.R.string.finalize, this, AssertionFramework.COMPOSE);
+        checkIsToastWithMessageDisplayed(errorMsg);
+        return this;
+    }
+
+    public MainMenuPage clickSend() {
+        return clickOnString(org.odk.collect.strings.R.string.send, new MainMenuPage(), AssertionFramework.COMPOSE);
+    }
+
+    public FormMapPage clickSaveAndExitBackToMap() {
+        return clickSaveAsDraft(new FormMapPage(formName));
+    }
+
+    public FormEntryPage clickSaveAndExitWithError(String errorText) {
+        FormEntryPage page = clickOnString(org.odk.collect.strings.R.string.finalize, new FormEntryPage(formName), AssertionFramework.COMPOSE);
+        assertText(errorText);
+        return page;
+    }
+
+    public ChangesReasonPromptPage clickSaveAndExitWithChangesReasonPrompt() {
+        return clickFinalize(new ChangesReasonPromptPage(formName));
+    }
+
+    public FormHierarchyPage clickGoToArrow() {
+        onView(withId(R.id.menu_goto)).perform(click());
+        return new FormHierarchyPage(formName);
+    }
+
+    public FormEntryPage swipeToPreviousQuestion(String questionText) {
+        return new FormEntryPage(formName).swipeToPreviousQuestion(questionText);
+    }
+
+    public FormEntryPage swipeToPreviousQuestion(String questionText, boolean isRequired) {
+        return new FormEntryPage(formName).swipeToPreviousQuestion(questionText, isRequired);
+    }
+
+    public FormEndPage clickOptionsIcon() {
+        return clickOptionsIcon(org.odk.collect.strings.R.string.project_settings);
+    }
+}

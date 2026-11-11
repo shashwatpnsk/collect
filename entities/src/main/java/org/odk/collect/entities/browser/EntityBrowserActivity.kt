@@ -1,0 +1,68 @@
+package org.odk.collect.entities.browser
+
+import android.os.Bundle
+import androidx.appcompat.widget.Toolbar
+import androidx.compose.runtime.Composable
+import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.navigation.fragment.NavHostFragment
+import androidx.navigation.ui.AppBarConfiguration
+import androidx.navigation.ui.setupWithNavController
+import org.odk.collect.androidshared.ui.ComposeThemeProvider
+import org.odk.collect.androidshared.ui.EdgeToEdge.setView
+import org.odk.collect.androidshared.ui.FragmentFactoryBuilder
+import org.odk.collect.async.Scheduler
+import org.odk.collect.entities.EntitiesDependencyComponentProvider
+import org.odk.collect.entities.R
+import org.odk.collect.entities.storage.EntitiesRepository
+import org.odk.collect.strings.localization.LocalizedActivity
+import javax.inject.Inject
+
+class EntityBrowserActivity : LocalizedActivity(), ComposeThemeProvider {
+
+    @Inject
+    lateinit var scheduler: Scheduler
+
+    @Inject
+    lateinit var entitiesRepository: EntitiesRepository
+
+    @Inject
+    lateinit var composeThemeProvider: ComposeThemeProvider
+
+    val viewModelFactory = viewModelFactory {
+        addInitializer(EntitiesViewModel::class) {
+            EntitiesViewModel(scheduler, entitiesRepository)
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        supportFragmentManager.fragmentFactory = FragmentFactoryBuilder()
+            .forClass(EntityListsFragment::class) {
+                EntityListsFragment(
+                    viewModelFactory,
+                    ::getToolbar
+                )
+            }
+            .forClass(EntitiesFragment::class) { EntitiesFragment(viewModelFactory) }
+            .build()
+
+        super.onCreate(savedInstanceState)
+        (applicationContext as EntitiesDependencyComponentProvider)
+            .entitiesDependencyComponent.inject(this)
+
+        setView(R.layout.entities_layout, false)
+
+        val navHostFragment =
+            supportFragmentManager.findFragmentById(R.id.nav_host) as NavHostFragment
+        val navController = navHostFragment.navController
+
+        val appBarConfiguration = AppBarConfiguration(navController.graph)
+        getToolbar().setupWithNavController(navController, appBarConfiguration)
+    }
+
+    private fun getToolbar() = findViewById<Toolbar>(org.odk.collect.androidshared.R.id.toolbar)
+
+    @Composable
+    override fun Theme(content: @Composable (() -> Unit)) {
+        composeThemeProvider.Theme { content() }
+    }
+}

@@ -14,32 +14,30 @@
 
 package org.odk.collect.android.widgets;
 
-import android.annotation.SuppressLint;
-import android.content.Context;
-import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.drawable.BitmapDrawable;
-import android.net.Uri;
-import android.support.v4.content.FileProvider;
-import android.view.View;
-import android.widget.Button;
-
-import org.javarosa.form.api.FormEntryPrompt;
-import org.odk.collect.android.BuildConfig;
-import org.odk.collect.android.R;
-import org.odk.collect.android.activities.DrawActivity;
-import org.odk.collect.android.activities.FormEntryActivity;
-import org.odk.collect.android.application.Collect;
-import org.odk.collect.android.listeners.PermissionListener;
-import org.odk.collect.android.utilities.FileUtils;
-
-import java.io.File;
-import java.util.Locale;
-
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 import static org.odk.collect.android.utilities.ApplicationConstants.RequestCodes;
-import static org.odk.collect.android.utilities.PermissionUtils.requestCameraPermission;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.util.Size;
+import android.view.View;
+import org.javarosa.form.api.FormEntryPrompt;
+import org.odk.collect.android.databinding.AnnotateWidgetBinding;
+import org.odk.collect.draw.DrawActivity;
+import org.odk.collect.android.formentry.questions.QuestionDetails;
+import org.odk.collect.android.utilities.Appearances;
+import org.odk.collect.android.utilities.FileUtils;
+import org.odk.collect.android.utilities.QuestionMediaManager;
+import org.odk.collect.android.utilities.QuestionMediaManagerKt;
+import org.odk.collect.android.widgets.utilities.ImageCaptureIntentCreator;
+import org.odk.collect.android.widgets.utilities.WaitingForDataRegistry;
+import org.odk.collect.androidshared.bitmap.ImageFileUtils;
+import org.odk.collect.androidshared.ui.ToastUtils;
+import java.io.File;
+import java.util.Locale;
 
 /**
  * Image widget that supports annotations on the image.
@@ -50,130 +48,117 @@ import static org.odk.collect.android.utilities.PermissionUtils.requestCameraPer
  */
 @SuppressLint("ViewConstructor")
 public class AnnotateWidget extends BaseImageWidget {
+    AnnotateWidgetBinding binding;
 
-    private Button captureButton;
-    private Button chooseButton;
-    private Button annotateButton;
-
-    public AnnotateWidget(Context context, FormEntryPrompt prompt) {
-        super(context, prompt);
-        imageClickHandler = new DrawImageClickHandler(DrawActivity.OPTION_ANNOTATE, RequestCodes.ANNOTATE_IMAGE, R.string.annotate_image);
+    public AnnotateWidget(Context context, QuestionDetails prompt, QuestionMediaManager questionMediaManager, WaitingForDataRegistry waitingForDataRegistry, String tmpImageFilePath, Dependencies dependencies) {
+        super(context, prompt, questionMediaManager, waitingForDataRegistry, tmpImageFilePath, dependencies);
+        imageClickHandler = new DrawImageClickHandler(DrawActivity.OPTION_ANNOTATE, RequestCodes.ANNOTATE_IMAGE, org.odk.collect.strings.R.string.annotate_image);
         imageCaptureHandler = new ImageCaptureHandler();
-        setUpLayout();
-        setUpBinary();
-        addAnswerView(answerLayout);
+
+        render();
     }
 
     @Override
-    protected void setUpLayout() {
-        super.setUpLayout();
-        captureButton = getSimpleButton(getContext().getString(R.string.capture_image), R.id.capture_image);
+    protected View onCreateWidgetView(Context context, FormEntryPrompt prompt, int answerFontSize) {
+        binding = AnnotateWidgetBinding.inflate(((Activity) context).getLayoutInflater());
+        errorTextView = binding.errorMessage;
+        imageView = binding.image;
+        updateAnswer();
 
-        chooseButton = getSimpleButton(getContext().getString(R.string.choose_image), R.id.choose_image);
-
-        annotateButton = getSimpleButton(getContext().getString(R.string.markup_image), R.id.markup_image);
-        if (binaryName == null) {
-            annotateButton.setEnabled(false);
+        if (getFormEntryPrompt().getAppearanceHint() != null && getFormEntryPrompt().getAppearanceHint().toLowerCase(Locale.ENGLISH).contains(Appearances.NEW)) {
+            binding.chooseButton.setVisibility(View.GONE);
         }
-        annotateButton.setOnClickListener(v -> imageClickHandler.clickImage("annotateButton"));
 
-        answerLayout.addView(captureButton);
-        answerLayout.addView(chooseButton);
-        answerLayout.addView(annotateButton);
-        answerLayout.addView(errorTextView);
+        updateButtonStates();
 
-        hideButtonsIfNeeded();
-        errorTextView.setVisibility(View.GONE);
+        binding.captureButton.setOnClickListener(v -> getPermissionsProvider().requestCameraPermission((Activity) getContext(), () -> {
+            Intent intent = ImageCaptureIntentCreator.imageCaptureIntent(getFormEntryPrompt(), getContext(), tmpImageFilePath);
+            imageCaptureHandler.captureImage(intent, RequestCodes.IMAGE_CAPTURE, org.odk.collect.strings.R.string.annotate_image);
+        }));
+        binding.chooseButton.setOnClickListener(v -> imageCaptureHandler.chooseImage(org.odk.collect.strings.R.string.annotate_image));
+        binding.annotateButton.setOnClickListener(v -> imageClickHandler.clickImage("annotateButton"));
+        binding.image.setOnClickListener(v -> imageClickHandler.clickImage("viewImage"));
+
+        if (questionDetails.isReadOnly()) {
+            binding.captureButton.setVisibility(View.GONE);
+            binding.chooseButton.setVisibility(View.GONE);
+            binding.annotateButton.setVisibility(View.GONE);
+        }
+
+        return binding.getRoot();
     }
 
     @Override
     public Intent addExtrasToIntent(Intent intent) {
-        intent.putExtra(DrawActivity.SCREEN_ORIENTATION, calculateScreenOrientation());
+        int screenOrientation = isBaseImagePortrait()
+                ? SCREEN_ORIENTATION_PORTRAIT
+                : SCREEN_ORIENTATION_LANDSCAPE;
+
+        intent.putExtra(DrawActivity.SCREEN_ORIENTATION, screenOrientation);
         return intent;
+    }
+
+    private boolean isBaseImagePortrait() {
+        File baseImage = getAnswerOrDefaultImageFile();
+        if (baseImage == null || !baseImage.exists()) {
+            return false;
+        }
+
+        Size dimensions = ImageFileUtils.getImageDisplayDimensions(baseImage);
+        return dimensions != null && dimensions.getHeight() > dimensions.getWidth();
     }
 
     @Override
     public void clearAnswer() {
         super.clearAnswer();
-        annotateButton.setEnabled(false);
-
-        // reset buttons
-        captureButton.setText(getContext().getString(R.string.capture_image));
+        updateButtonStates();
+        binding.captureButton.setText(getContext().getString(org.odk.collect.strings.R.string.capture_image));
     }
 
     @Override
     public void setOnLongClickListener(OnLongClickListener l) {
-        captureButton.setOnLongClickListener(l);
-        chooseButton.setOnLongClickListener(l);
-        annotateButton.setOnLongClickListener(l);
+        binding.captureButton.setOnLongClickListener(l);
+        binding.chooseButton.setOnLongClickListener(l);
+        binding.annotateButton.setOnLongClickListener(l);
         super.setOnLongClickListener(l);
     }
 
     @Override
     public void cancelLongPress() {
         super.cancelLongPress();
-        captureButton.cancelLongPress();
-        chooseButton.cancelLongPress();
-        annotateButton.cancelLongPress();
+        binding.captureButton.cancelLongPress();
+        binding.chooseButton.cancelLongPress();
+        binding.annotateButton.cancelLongPress();
     }
 
     @Override
-    public void onButtonClick(int buttonId) {
-        switch (buttonId) {
-            case R.id.capture_image:
-                requestCameraPermission((FormEntryActivity) getContext(), new PermissionListener() {
-                    @Override
-                    public void granted() {
-                        captureImage();
-                    }
-
-                    @Override
-                    public void denied() {
-                    }
-                });
-                break;
-            case R.id.choose_image:
-                imageCaptureHandler.chooseImage(R.string.annotate_image);
-                break;
+    public void setData(Object newImageObj) {
+        if (newImageObj instanceof File) {
+            String mimeType = FileUtils.getMimeType((File) newImageObj);
+            if ("image/gif".equals(mimeType)) {
+                ToastUtils.showLongToast(org.odk.collect.strings.R.string.gif_not_supported);
+            } else {
+                super.setData(newImageObj);
+                updateButtonStates();
+            }
         }
     }
 
-    private void hideButtonsIfNeeded() {
-        if (getFormEntryPrompt().getAppearanceHint() != null
-                && getFormEntryPrompt().getAppearanceHint().toLowerCase(Locale.ENGLISH).contains("new")) {
-            chooseButton.setVisibility(View.GONE);
-        }
+    private void updateButtonStates() {
+        boolean isDefaultImage = isDefaultImage();
+        boolean isAnswerImage = QuestionMediaManagerKt.getExistingAnswerFile(questionMediaManager, binaryName) != null;
+
+        binding.annotateButton.setEnabled(isDefaultImage || isAnswerImage);
+        binding.captureButton.setEnabled(!isDefaultImage);
+        binding.chooseButton.setEnabled(!isDefaultImage);
     }
 
-    private int calculateScreenOrientation() {
-        Bitmap bmp = null;
-        if (imageView != null) {
-            bmp = ((BitmapDrawable) imageView.getDrawable()).getBitmap();
+    private boolean isDefaultImage() {
+        if (binaryName == null || !binaryName.startsWith("jr://images/")) {
+            return false;
         }
 
-        return bmp != null && bmp.getHeight() > bmp.getWidth() ?
-                SCREEN_ORIENTATION_PORTRAIT : SCREEN_ORIENTATION_LANDSCAPE;
-    }
-
-    private void captureImage() {
-        errorTextView.setVisibility(View.GONE);
-        Intent intent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
-        // We give the camera an absolute filename/path where to put the
-        // picture because of bug:
-        // http://code.google.com/p/android/issues/detail?id=1480
-        // The bug appears to be fixed in Android 2.0+, but as of feb 2,
-        // 2010, G1 phones only run 1.6. Without specifying the path the
-        // images returned by the camera in 1.6 (and earlier) are ~1/4
-        // the size. boo.
-
-        Uri uri = FileProvider.getUriForFile(getContext(),
-                BuildConfig.APPLICATION_ID + ".provider",
-                new File(Collect.TMPFILE_PATH));
-        // if this gets modified, the onActivityResult in
-        // FormEntyActivity will also need to be updated.
-        intent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, uri);
-        FileUtils.grantFilePermissions(intent, uri, getContext());
-
-        imageCaptureHandler.captureImage(intent, RequestCodes.IMAGE_CAPTURE, R.string.annotate_image);
+        File file = getAnswerOrDefaultImageFile();
+        return file != null && file.exists();
     }
 }

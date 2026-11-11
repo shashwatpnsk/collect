@@ -1,0 +1,41 @@
+package org.odk.collect.maplibre
+
+import dagger.Component
+import dagger.Module
+import dagger.Provides
+import org.odk.collect.maplibre.staticmap.MapLibreStaticMapLoader
+import org.odk.collect.maps.layers.ReferenceLayerRepository
+import org.odk.collect.settings.SettingsProvider
+import org.odk.collect.shared.injection.Keys
+import javax.inject.Singleton
+
+interface MapLibreDependencyComponentProvider {
+    val mapLibreDependencyComponent: MapLibreDependencyComponent
+}
+
+@Component(modules = [MapLibreDependencyModule::class])
+@Singleton
+interface MapLibreDependencyComponent {
+    fun inject(mapLibreMapFragment: MapLibreMapFragment)
+
+    fun inject(mapLibreStaticMapLoader: MapLibreStaticMapLoader)
+}
+
+@Module
+open class MapLibreDependencyModule {
+
+    @Provides
+    open fun providesReferenceLayerRepository(): ReferenceLayerRepository {
+        throw UnsupportedOperationException("This should be overridden by dependent application")
+    }
+
+    @Provides
+    open fun providesSettingsProvider(): SettingsProvider {
+        throw UnsupportedOperationException("This should be overridden by dependent application")
+    }
+
+    @Provides
+    open fun providesKeys(): Keys {
+        throw UnsupportedOperationException("This should be overridden by dependent application")
+    }
+}

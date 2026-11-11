@@ -15,99 +15,69 @@
 package org.odk.collect.android.widgets;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.Context;
 import android.net.Uri;
-import android.widget.Button;
-import android.widget.LinearLayout;
-import android.widget.TextView;
-import android.widget.Toast;
+import android.view.View;
 
 import org.javarosa.core.model.data.IAnswerData;
 import org.javarosa.core.model.data.StringData;
 import org.javarosa.form.api.FormEntryPrompt;
-import org.odk.collect.android.R;
-import org.odk.collect.android.utilities.CustomTabHelper;
-import org.odk.collect.android.widgets.interfaces.ButtonWidget;
+import org.odk.collect.android.databinding.UrlWidgetAnswerBinding;
+import org.odk.collect.android.formentry.questions.QuestionDetails;
+import org.odk.collect.androidshared.ui.ToastUtils;
+import org.odk.collect.webpage.WebPageService;
 
-/**
- * Widget that allows user to open URLs from within the form
- *
- * @author Yaw Anokwa (yanokwa@gmail.com)
- */
 @SuppressLint("ViewConstructor")
-public class UrlWidget extends QuestionWidget implements ButtonWidget {
+public class UrlWidget extends QuestionWidget {
+    UrlWidgetAnswerBinding binding;
 
-    private Uri uri;
-    private final Button openUrlButton;
-    private final TextView stringAnswer;
-    private final CustomTabHelper customTabHelper;
+    private final WebPageService webPageService;
 
-    public UrlWidget(Context context, FormEntryPrompt prompt) {
-        super(context, prompt);
+    public UrlWidget(Context context, QuestionDetails questionDetails, WebPageService webPageService, Dependencies dependencies) {
+        super(context, dependencies, questionDetails);
+        render();
 
-        openUrlButton = getSimpleButton(context.getString(R.string.open_url));
-
-        stringAnswer = getCenteredAnswerTextView();
-
-        String s = prompt.getAnswerText();
-        if (s != null) {
-            stringAnswer.setText(s);
-            uri = Uri.parse(stringAnswer.getText().toString());
-        }
-
-        // finish complex layout
-        LinearLayout answerLayout = new LinearLayout(getContext());
-        answerLayout.setOrientation(LinearLayout.VERTICAL);
-        answerLayout.addView(openUrlButton);
-        answerLayout.addView(stringAnswer);
-        addAnswerView(answerLayout);
-
-        customTabHelper = new CustomTabHelper();
+        this.webPageService = webPageService;
     }
 
-    private boolean isUrlEmpty(TextView stringAnswer) {
-        return stringAnswer == null || stringAnswer.getText() == null
-                || stringAnswer.getText().toString().isEmpty();
+    @Override
+    protected View onCreateWidgetView(Context context, FormEntryPrompt prompt, int answerFontSize) {
+        binding = UrlWidgetAnswerBinding.inflate(((Activity) context).getLayoutInflater());
+        binding.urlButton.setOnClickListener(v -> onButtonClick());
+
+        return binding.getRoot();
     }
 
     @Override
     public void clearAnswer() {
-        Toast.makeText(getContext(), "URL is readonly", Toast.LENGTH_SHORT).show();
+        ToastUtils.showShortToast("URL is readonly");
     }
 
     @Override
     public IAnswerData getAnswer() {
-        String s = stringAnswer.getText().toString();
-        return !s.isEmpty()
-                ? new StringData(s)
-                : null;
+        return getFormEntryPrompt().getAnswerValue() == null
+                ? null
+                : new StringData(getFormEntryPrompt().getAnswerText());
     }
 
     @Override
     public void setOnLongClickListener(OnLongClickListener l) {
+        binding.urlButton.setOnLongClickListener(l);
     }
 
     @Override
     public void cancelLongPress() {
         super.cancelLongPress();
-        openUrlButton.cancelLongPress();
-        stringAnswer.cancelLongPress();
+        binding.urlButton.cancelLongPress();
     }
 
-    protected void onDetachedFromWindow() {
-        super.onDetachedFromWindow();
-        if (customTabHelper.getServiceConnection() != null) {
-            getContext().unbindService(customTabHelper.getServiceConnection());
-        }
-    }
-
-    @Override
-    public void onButtonClick(int buttonId) {
-        if (!isUrlEmpty(stringAnswer)) {
-            customTabHelper.bindCustomTabsService(getContext(), null);
-            customTabHelper.openUri(getContext(), uri);
+    public void onButtonClick() {
+        if (getFormEntryPrompt().getAnswerValue() != null) {
+            Activity activity = (Activity) getContext();
+            webPageService.openWebPage(activity, Uri.parse(getFormEntryPrompt().getAnswerText()));
         } else {
-            Toast.makeText(getContext(), "No URL set", Toast.LENGTH_SHORT).show();
+            ToastUtils.showShortToast("No URL set");
         }
     }
 }

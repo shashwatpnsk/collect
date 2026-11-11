@@ -1,86 +1,167 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <!--Dark Theme-->
-    <style name="DarkAppTheme" parent="BaseDarkAppTheme.Collect" />
+    <!-- Changes to this theme should also be made in ComposeTheme.kt-->
+    <style name="Theme.Collect" parent="Theme.Material3.DayNight.NoActionBar">
 
-    <style name="FormEntryActivityDarkTheme" parent="DarkAppTheme">
-        <item name="android:textDirection" tools:targetApi="17">firstStrong</item>
-    </style>
+        <!-- Original AppCompat attributes. -->
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorSecondary">@color/colorPrimary</item>
+        <item name="android:colorBackground">@color/colorSurface</item>
+        <item name="colorError">@color/colorError</item>
 
-    <style name="BaseDarkAppTheme.Collect" parent="BaseDarkAppTheme" />
+        <!-- MaterialComponents attributes (needed if parent="Theme.AppCompat"). -->
+        <item name="colorPrimaryVariant">@color/colorPrimary</item>
+        <item name="colorSecondaryVariant">@color/colorPrimary</item>
+        <item name="colorSurface">@color/colorSurface</item>
+        <item name="colorOnPrimary">@color/colorOnPrimary</item>
+        <item name="colorOnSecondary">@color/colorOnPrimary</item>
+        <item name="colorOnBackground">@color/colorOnSurface</item>
+        <!--
+            colorOnError should refer to @color/colorOnError
+            This is a temporary fix and we can get rid of it when setting cursor error color is possible https://github.com/material-components/material-components-android/issues/3345
+        -->
+        <item name="colorOnError">@color/colorPrimary</item>
+        <item name="colorOnSurface">@color/colorOnSurface</item>
+        <item name="textAppearanceHeadline1">@style/TextAppearance.MaterialComponents.Headline1
+        </item>
+        <item name="textAppearanceHeadline2">@style/TextAppearance.MaterialComponents.Headline2
+        </item>
+        <item name="textAppearanceHeadline3">@style/TextAppearance.MaterialComponents.Headline3
+        </item>
+        <item name="textAppearanceHeadline4">@style/TextAppearance.Collect.Headline4</item>
+        <item name="textAppearanceHeadline5">@style/TextAppearance.Collect.Headline5</item>
+        <item name="textAppearanceHeadline6">@style/TextAppearance.Collect.Headline6</item>
+        <item name="textAppearanceSubtitle1">@style/TextAppearance.Collect.Subtitle1</item>
+        <item name="textAppearanceSubtitle2">@style/TextAppearance.MaterialComponents.Subtitle2
+        </item>
+        <item name="textAppearanceBody1">@style/TextAppearance.Collect.Body1</item>
+        <item name="textAppearanceBody2">@style/TextAppearance.Collect.Body2</item>
+        <item name="textAppearanceCaption">@style/TextAppearance.MaterialComponents.Caption</item>
+        <item name="textAppearanceButton">@style/TextAppearance.Collect.Button</item>
+        <item name="textAppearanceOverline">@style/TextAppearance.MaterialComponents.Overline</item>
 
-    <style name="BaseDarkAppTheme" parent="Theme.AppCompat.NoActionBar">
-        <item name="primaryTextColor">@color/darkPrimaryTextColor</item>
-        <item name="android:scrollbarThumbHorizontal">@drawable/thumb</item>
-        <item name="android:scrollbarThumbVertical">@drawable/thumb</item>
-        <item name="android:scrollbarSize">1.75mm</item>
-        <item name="android:scrollbarAlwaysDrawVerticalTrack">true</item>
+        <!-- Material3 attributes (needed if parent="Theme.MaterialComponents"). -->
+        <item name="colorPrimaryInverse">@color/colorPrimaryInverse</item>
+        <item name="colorPrimaryContainer">@color/colorPrimaryContainer</item>
+        <item name="colorOnPrimaryContainer">@color/colorOnPrimaryContainer</item>
+        <item name="colorSecondaryContainer">@color/colorPrimaryContainer</item>
+        <item name="colorOnSecondaryContainer">@color/colorOnPrimaryContainer</item>
+        <item name="colorTertiary">@color/colorPrimary</item>
+        <item name="colorOnTertiary">@color/colorOnPrimary</item>
+        <item name="colorTertiaryContainer">@color/colorPrimaryContainer</item>
+        <item name="colorOnTertiaryContainer">@color/colorOnPrimaryContainer</item>
+        <item name="colorSurfaceVariant">@color/colorSurfaceVariant</item>
+        <item name="colorOnSurfaceVariant">@color/colorOnSurfaceVariant</item>
+        <item name="colorSurfaceInverse">@color/colorSurfaceInverse</item>
+        <item name="colorOnSurfaceInverse">@color/colorOnSurfaceInverse</item>
+        <item name="colorOutline">@color/color_on_surface_medium_emphasis</item>
+        <item name="colorSurfaceContainerLowest">@color/colorSurfaceContainerLowest</item>
+        <item name="colorSurfaceContainerLow">@color/colorSurfaceContainerLow</item>
+        <item name="colorSurfaceContainer">@color/colorSurfaceContainer</item>
+        <item name="colorSurfaceContainerHigh">@color/colorSurfaceContainerHigh</item>
+        <item name="colorSurfaceContainerHighest">@color/colorSurfaceContainerHighest</item>
+        <item name="textAppearanceDisplayLarge">@style/TextAppearance.Material3.DisplayLarge</item>
+        <item name="textAppearanceDisplayMedium">@style/TextAppearance.Material3.DisplayMedium
+        </item>
+        <item name="textAppearanceDisplaySmall">@style/TextAppearance.Material3.DisplaySmall</item>
+        <item name="textAppearanceHeadlineLarge">@style/TextAppearance.Material3.HeadlineLarge
+        </item>
+        <item name="textAppearanceHeadlineMedium">@style/TextAppearance.Material3.HeadlineMedium
+        </item>
+        <item name="textAppearanceHeadlineSmall">@style/TextAppearance.Material3.HeadlineSmall
+        </item>
+        <item name="textAppearanceTitleLarge">@style/TextAppearance.Collect.TitleLarge</item>
+        <item name="textAppearanceTitleMedium">@style/TextAppearance.Material3.TitleMedium</item>
+        <item name="textAppearanceTitleSmall">@style/TextAppearance.Material3.TitleSmall</item>
+        <item name="textAppearanceBodyLarge">?textAppearanceBody1</item>
+        <item name="textAppearanceBodyMedium">@style/TextAppearance.Material3.BodyMedium</item>
+        <item name="textAppearanceBodySmall">@style/TextAppearance.Material3.BodySmall</item>
+        <item name="textAppearanceLabelLarge">@style/TextAppearance.Material3.LabelLarge</item>
+        <item name="textAppearanceLabelMedium">@style/TextAppearance.Material3.LabelMedium</item>
+        <item name="textAppearanceLabelSmall">@style/TextAppearance.Material3.LabelSmall</item>
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Material3.SmallComponent
+        </item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Collect.MediumComponent
+        </item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Material3.LargeComponent
+        </item>
+        <item name="elevationOverlayEnabled">true</item>
+
+        <!-- Material3 polyfill attributes (needed in Material Components yet). -->
+        <item name="materialButtonIconStyle">@style/Widget.Collect.Button.Icon</item>
+        <item name="materialButtonOutlinedIconStyle">@style/Widget.Collect.Button.OutlinedButton.Icon</item>
+        <item name="materialIconButtonOutlinedStyle">@style/Widget.Collect.Button.IconButton.Outlined</item>
+        <item name="borderlessButtonIconStyle">@style/Widget.Collect.Button.TextButton.Icon</item>
+        <item name="materialButtonStyle">@style/Widget.Collect.Button</item>
+        <item name="materialButtonOutlinedStyle">@style/Widget.Collect.Button.OutlinedButton</item>
+        <item name="borderlessButtonStyle">@style/Widget.Collect.Button.TextButton</item>
+        <item name="materialAlertDialogTheme">@style/Theme.Collect.Dialog.Alert</item>
+        <item name="bottomSheetDialogTheme">@style/Theme.Collect.BottomSheet</item>
+
+        <!-- Custom style for buttons used in question widgets -->
+        <item name="widgetButtonIconQuestionWidgetStyle">@style/Widget.Collect.Button.Icon.QuestionWidget</item>
+
+        <!-- Custom theme text appearance for larger buttons -->
+        <item name="textAppearanceLabelExtraLarge">@style/TextAppearance.Collect.LabelExtraLarge</item>
+
+        <!-- Needed to make scrollbars always visible -->
+        <item name="android:scrollbars">vertical</item>
+
+        <!-- Needed to customize the status bar color -->
+        <item name="android:statusBarColor">?colorSurface</item>
+        <item name="android:windowLightStatusBar" >@bool/lightStatusBar</item>
+
+        <!-- Used as divider in many places. Not sure why. -->
+        <item name="dividerCompat">@android:drawable/divider_horizontal_bright</item>
+
+        <!-- Remove icon from SearchView -->
+        <item name="searchViewStyle">@style/Widget.Collect.SearchView.NoIcon</item>
+
+        <!-- Always show scrollbars for a11y reasons -->
         <item name="android:fadeScrollbars">false</item>
-        <item name="android:fontFamily">@string/font_family_regular</item>
-        <item name="android:panelBackground">@android:color/white</item>
-        <item name="searchViewStyle">@style/SearchViewTheme.Dark</item>
-        <item name="iconColor">@color/defaultDarkIconColor</item>
-        <item name="rankItemColor">@color/darkRankItemColor</item>
-        <item name="android:textDirection" tools:targetApi="17">locale</item>
-        <item name="warningColor">@color/red</item>
-        <item name="divider">@android:drawable/divider_horizontal_dark</item>
+
+        <!-- Use locale for text direction in views -->
+        <item name="android:textDirection">locale</item>
+
+        <!-- Sets up theme correction for anything using `AlertDialog.Builder` -->
+        <item name="alertDialogTheme">@style/Theme.Collect.Dialog.Alert</item>
+        <item name="android:alertDialogTheme">@style/Theme.Collect.Dialog.Alert</item>
+        <item name="dialogCornerRadius">8dp</item>
+
+        <item name="linearProgressIndicatorStyle">@style/Widget.Collect.LinearProgressIndicator</item>
+        <item name="sliderStyle">@style/Widget.Collect.Slider</item>
     </style>
 
-    <style name="AppTheme.SettingsTheme.Dark" parent="BaseDarkAppTheme">
-        <item name="android:textColor">?primaryTextColor</item>
-        <item name="android:textDirection" tools:targetApi="17">locale</item>
-        <item name="android:textSize">18sp</item>
-        <item name="android:listDivider">@null</item>
-        <item name="android:dividerHeight">0dp</item>
+    <style name="Widget.Collect.LinearProgressIndicator" parent="Widget.Material3.LinearProgressIndicator">
+        <item name="trackStopIndicatorSize">@null</item>
+        <item name="indicatorTrackGapSize">@null</item>
     </style>
 
-    <style name="SearchViewTheme.Dark" parent="Widget.AppCompat.SearchView">
+    <style name="Widget.Collect.Slider" parent="Widget.Material3.Slider">
+        <item name="labelBehavior">gone</item>
+    </style>
+
+    <style name="Theme.Collect.SplashScreen" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/colorSurface</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_screen_icon</item>
+        <item name="postSplashScreenTheme">@style/Theme.Collect</item>
+    </style>
+
+    <style name="Theme.Collect.Dialog.Alert" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.Collect.Dialog.PositiveButton</item>
+    </style>
+
+    <style name="Widget.Collect.Dialog.PositiveButton" parent="Widget.Material3.Button">
+        <item name="android:layout_marginStart">@dimen/margin_standard</item>
+    </style>
+
+    <style name="Widget.Collect.SearchView.NoIcon" parent="Widget.AppCompat.SearchView">
         <item name="searchHintIcon">@null</item>
     </style>
 
-
-    <!--Light Theme-->
-    <style name="LightAppTheme" parent="BaseLightAppTheme.Collect" />
-
-    <style name="FormEntryActivityLightTheme" parent="LightAppTheme">
-        <item name="android:textDirection" tools:targetApi="17">firstStrong</item>
-    </style>
-
-    <style name="BaseLightAppTheme.Collect" parent="BaseLightAppTheme" />
-
-    <style name="BaseLightAppTheme" parent="Theme.AppCompat.Light.NoActionBar">
-        <item name="primaryTextColor">@color/lightPrimaryTextColor</item>
-        <item name="android:scrollbarThumbHorizontal">@drawable/thumb</item>
-        <item name="android:scrollbarThumbVertical">@drawable/thumb</item>
-        <item name="android:scrollbarSize">1.75mm</item>
-        <item name="android:scrollbarAlwaysDrawVerticalTrack">true</item>
-        <item name="android:fadeScrollbars">false</item>
-        <item name="colorAccent">@color/lightAccentColor</item>
-        <item name="android:fontFamily">@string/font_family_regular</item>
-        <item name="android:panelBackground">@android:color/white</item>
-        <item name="alertDialogTheme">@style/AlertDialogTheme.Light</item>
-        <item name="searchViewStyle">@style/SearchViewTheme.Light</item>
-        <item name="iconColor">@color/defaultLightIconColor</item>
-        <item name="rankItemColor">@color/lightRankItemColor</item>
-        <item name="android:textDirection" tools:targetApi="17">locale</item>
-        <item name="warningColor">@color/red</item>
-        <item name="divider">@android:drawable/divider_horizontal_bright</item>
-    </style>
-
-    <style name="AlertDialogTheme.Light" parent="Theme.AppCompat.Light.Dialog.Alert">
-        <item name="colorAccent">@color/lightAccentColor</item>
-    </style>
-
-    <style name="AppTheme.SettingsTheme.Light" parent="BaseLightAppTheme">
-        <item name="android:textColor">?primaryTextColor</item>
-        <item name="android:textDirection" tools:targetApi="17">locale</item>
-        <item name="android:textSize">18sp</item>
-        <item name="android:listDivider">@null</item>
-        <item name="android:dividerHeight">0dp</item>
-    </style>
-
-    <style name="SearchViewTheme.Light" parent="Widget.AppCompat.Light.SearchView">
-        <item name="searchHintIcon">@null</item>
+    <style name="Theme.Collect.BottomSheet" parent="ThemeOverlay.Material3.BottomSheetDialog">
+        <item name="materialButtonStyle">@style/Widget.Collect.Button</item>
     </style>
 </resources>

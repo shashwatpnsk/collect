@@ -1,6 +1,6 @@
 package org.odk.collect.android.widgets.base;
 
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 
 import net.bytebuddy.utility.RandomString;
 
@@ -8,6 +8,7 @@ import org.javarosa.core.model.data.StringData;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.odk.collect.android.widgets.interfaces.FileWidget;
+import org.odk.collect.shared.TempFiles;
 
 import java.io.File;
 
@@ -26,6 +27,11 @@ public abstract class FileWidgetTest<W extends FileWidget> extends BinaryWidgetT
     }
 
     @Override
+    public Object createBinaryData(StringData answerData) {
+        return TempFiles.createTempFileWithName(answerData.getDisplayText());
+    }
+
+    @Override
     public void setUp() throws Exception {
         super.setUp();
 
@@ -35,11 +41,9 @@ public abstract class FileWidgetTest<W extends FileWidget> extends BinaryWidgetT
 
     @Test
     public void settingANewAnswerShouldCallDeleteMediaToRemoveTheOldFile() {
-        prepareForSetAnswer();
-
         super.settingANewAnswerShouldRemoveTheOldAnswer();
 
-        W widget = getWidget();
+        W widget = getSpyWidget();
         verify(widget).deleteFile();
     }
 
@@ -47,27 +51,7 @@ public abstract class FileWidgetTest<W extends FileWidget> extends BinaryWidgetT
     public void callingClearAnswerShouldCallDeleteMediaAndRemoveTheExistingAnswer() {
         super.callingClearShouldRemoveTheExistingAnswer();
 
-        W widget = getWidget();
+        W widget = getSpyWidget();
         verify(widget).deleteFile();
-    }
-
-    @Override
-    public void getAnswerShouldReturnCorrectAnswerAfterBeingSet() {
-        prepareForSetAnswer();
-        super.getAnswerShouldReturnCorrectAnswerAfterBeingSet();
-    }
-
-    @Override
-    public void settingANewAnswerShouldRemoveTheOldAnswer() {
-        prepareForSetAnswer();
-        super.settingANewAnswerShouldRemoveTheOldAnswer();
-    }
-
-    /**
-     * Override this to provide additional set-up prior to testing any set answer methods.
-     */
-    @SuppressWarnings("PMD.EmptyMethodInAbstractClassShouldBeAbstract")
-    protected void prepareForSetAnswer() {
-        // Default implementation does nothing.
     }
 }

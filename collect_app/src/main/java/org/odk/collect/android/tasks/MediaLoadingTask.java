@@ -1,104 +1,85 @@
 package org.odk.collect.android.tasks;
 
+import static org.odk.collect.settings.keys.ProjectKeys.KEY_IMAGE_SIZE;
+
+import android.annotation.SuppressLint;
 import android.net.Uri;
 import android.os.AsyncTask;
-import android.provider.MediaStore;
-import android.support.v4.app.DialogFragment;
-import android.support.v4.app.Fragment;
 
-import org.odk.collect.android.R;
-import org.odk.collect.android.activities.FormEntryActivity;
+import org.javarosa.core.model.Constants;
+import org.odk.collect.android.activities.FormFillingActivity;
 import org.odk.collect.android.application.Collect;
-import org.odk.collect.android.dao.helpers.ContentResolverHelper;
-import org.odk.collect.android.exception.GDriveConnectionException;
-import org.odk.collect.android.fragments.dialogs.ProgressDialogFragment;
-import org.odk.collect.android.logic.FormController;
+import org.odk.collect.android.injection.DaggerUtils;
+import org.odk.collect.android.utilities.ContentUriHelper;
 import org.odk.collect.android.utilities.FileUtils;
-import org.odk.collect.android.utilities.ImageConverter;
-import org.odk.collect.android.utilities.MediaUtils;
-import org.odk.collect.android.utilities.ToastUtils;
-import org.odk.collect.android.views.ODKView;
-import org.odk.collect.android.widgets.BaseImageWidget;
-import org.odk.collect.android.widgets.ImageWebViewWidget;
+import org.odk.collect.android.utilities.ImageCompressionController;
 import org.odk.collect.android.widgets.QuestionWidget;
+import org.odk.collect.androidshared.system.UriExtKt;
+import org.odk.collect.androidshared.ui.DialogFragmentUtils;
+import org.odk.collect.settings.SettingsProvider;
 
 import java.io.File;
 import java.lang.ref.WeakReference;
+
+import javax.inject.Inject;
 
 import timber.log.Timber;
 
 public class MediaLoadingTask extends AsyncTask<Uri, Void, File> {
 
-    private WeakReference<FormEntryActivity> formEntryActivity;
+    private final File instanceFile;
+    @Inject
+    SettingsProvider settingsProvider;
 
-    public MediaLoadingTask(FormEntryActivity formEntryActivity) {
-        onAttach(formEntryActivity);
+    @Inject
+    ImageCompressionController imageCompressionController;
+
+    private WeakReference<FormFillingActivity> formFillingActivity;
+
+    public MediaLoadingTask(FormFillingActivity formFillingActivity, File instanceFile) {
+        this.instanceFile = instanceFile;
+        onAttach(formFillingActivity);
     }
 
-    public void onAttach(FormEntryActivity formEntryActivity) {
-        this.formEntryActivity = new WeakReference<>(formEntryActivity);
+    public void onAttach(FormFillingActivity formFillingActivity) {
+        this.formFillingActivity = new WeakReference<>(formFillingActivity);
+        DaggerUtils.getComponent(this.formFillingActivity.get()).inject(this);
     }
 
-    public void onDetach() {
-        formEntryActivity = null;
-    }
-
+    @SuppressLint("WrongThread")
     @Override
     protected File doInBackground(Uri... uris) {
+        if (instanceFile != null) {
+            QuestionWidget questionWidget = formFillingActivity.get().getWidgetWaitingForBinaryData();
 
-        File instanceFile;
-        FormController formController = Collect.getInstance().getFormController();
-
-        if (formController != null) {
-            instanceFile = formController.getInstanceFile();
-            if (instanceFile != null) {
-                String instanceFolder = instanceFile.getParent();
-                String extension = ContentResolverHelper.getFileExtensionFromUri(uris[0]);
-                String destMediaPath = instanceFolder + File.separator + System.currentTimeMillis() + extension;
-
-                try {
-                    File chosenFile = MediaUtils.getFileFromUri(formEntryActivity.get(), uris[0], MediaStore.Images.Media.DATA);
-                    if (chosenFile != null) {
-                        final File newFile = new File(destMediaPath);
-                        FileUtils.copyFile(chosenFile, newFile);
-                        QuestionWidget questionWidget = formEntryActivity.get().getWidgetWaitingForBinaryData();
-
-                        // apply image conversion if the widget is an image widget
-                        if (questionWidget instanceof BaseImageWidget ||
-                                questionWidget instanceof ImageWebViewWidget) {
-                            ImageConverter.execute(newFile.getPath(), questionWidget, formEntryActivity.get());
-                        }
-
-                        return newFile;
-                    } else {
-                        Timber.e("Could not receive chosen file");
-                        formEntryActivity.get().runOnUiThread(() -> ToastUtils.showShortToastInMiddle(R.string.error_occured));
-                        return null;
-                    }
-                } catch (GDriveConnectionException e) {
-                    Timber.e("Could not receive chosen file due to connection problem");
-                    formEntryActivity.get().runOnUiThread(() -> ToastUtils.showLongToastInMiddle(R.string.gdrive_connection_exception));
-                    return null;
-                }
+            // getWidgetWaitingForBinaryData() returns null when no widget on it is registered
+            // in the waitingForDataRegistry as waiting for data.
+            // This can happen if that state was lost before the result came back (e.g. the activity/view
+            // was recreated in the meantime), in which case there is nothing to attach the file to.
+            if (questionWidget == null) {
+                Timber.e(new Error("MediaLoadingTask: no widget waiting for binary data - media file cannot be attached"));
+                return null;
             }
+
+            String extension = ContentUriHelper.getFileExtensionFromUri(uris[0]);
+
+            File newFile = FileUtils.createDestinationMediaFile(instanceFile.getParent(), extension);
+            UriExtKt.copyToFile(uris[0], Collect.getInstance(), newFile);
+
+            // apply image conversion if the question is an image question
+            if (questionWidget.getFormEntryPrompt().getControlType() == Constants.CONTROL_IMAGE_CHOOSE) {
+                String imageSizeMode = settingsProvider.getUnprotectedSettings().getString(KEY_IMAGE_SIZE);
+                imageCompressionController.execute(newFile.getPath(), questionWidget.getFormEntryPrompt(), formFillingActivity.get(), imageSizeMode);
+            }
+            return newFile;
         }
         return null;
-
     }
 
     @Override
     protected void onPostExecute(File result) {
-        Fragment prev = formEntryActivity.get().getSupportFragmentManager().findFragmentByTag(ProgressDialogFragment.COLLECT_PROGRESS_DIALOG_TAG);
-        if (prev != null) {
-            ((DialogFragment) prev).dismiss();
-        }
-
-        ODKView odkView = formEntryActivity.get().getCurrentViewIfODKView();
-        if (odkView != null) {
-            odkView.setBinaryData(result);
-        }
-
-        formEntryActivity.get().saveAnswersForCurrentScreen(FormEntryActivity.DO_NOT_EVALUATE_CONSTRAINTS);
-        formEntryActivity.get().refreshCurrentView();
+        FormFillingActivity activity = this.formFillingActivity.get();
+        DialogFragmentUtils.dismissDialog(FormFillingActivity.TAG_PROGRESS_DIALOG_MEDIA_LOADING, activity.getSupportFragmentManager());
+        activity.setWidgetData(result);
     }
 }

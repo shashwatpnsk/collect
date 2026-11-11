@@ -1,6 +1,7 @@
 build
 .gradle
 .idea
+.kotlin
 local.properties
 *.iml
 .DS_Store
@@ -10,7 +11,6 @@ local.properties
 *.*~
 
 # gradle env props
-gradle.properties
 secrets.properties
 
 # built application files
@@ -32,3 +32,29 @@ out/
 .externalNativeBuild/
 .navigation/
 captures/
+
+# Visual Studio Code files
+.project
+.settings/
+collect_app/.classpath
+collect_app/.project
+collect_app/.settings/
+
+# Config for the official ODK Collect build
+collect_app/src/odkCollectRelease/
+
+# Files generated during CI runs
+.circleci/collect_app_test_files.txt
+.circleci/collect_app_test_classes.txt
+.circleci/fork_test_classes.txt
+
+# Robolectric dependencies
+robolectric-deps/
+**/robolectric-deps.properties
+
+.local-m2
+apks
+
+# Empty side effect of writing dependency locks
+settings-gradle.lockfile
+

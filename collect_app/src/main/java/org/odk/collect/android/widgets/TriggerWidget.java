@@ -16,107 +16,70 @@ package org.odk.collect.android.widgets;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.support.v7.widget.AppCompatCheckBox;
 import android.util.TypedValue;
-import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.CheckBox;
-import android.widget.TextView;
+
+import androidx.appcompat.widget.AppCompatCheckBox;
 
 import org.javarosa.core.model.data.IAnswerData;
 import org.javarosa.core.model.data.StringData;
 import org.javarosa.form.api.FormEntryPrompt;
 import org.odk.collect.android.R;
-import org.odk.collect.android.utilities.ViewIds;
+import org.odk.collect.android.formentry.questions.QuestionDetails;
 
-/**
- * Widget that allows user to scan barcodes and add them to the form.
- *
- * @author Yaw Anokwa (yanokwa@gmail.com)
- */
 @SuppressLint("ViewConstructor")
 public class TriggerWidget extends QuestionWidget {
 
-    public static final String OK_TEXT = "OK";
+    private static final String OK_TEXT = "OK";
 
-    private final AppCompatCheckBox triggerButton;
-    private final TextView stringAnswer;
-    private final FormEntryPrompt prompt;
+    private AppCompatCheckBox triggerButton;
 
-    public TriggerWidget(Context context, FormEntryPrompt prompt) {
-        super(context, prompt);
-        this.prompt = prompt;
-
-        triggerButton = new AppCompatCheckBox(getContext());
-        triggerButton.setId(ViewIds.generateViewId());
-        triggerButton.setText(getContext().getString(R.string.trigger));
-        triggerButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, getAnswerFontSize());
-        // mActionButton.setPadding(20, 20, 20, 20);
-        triggerButton.setEnabled(!prompt.isReadOnly());
-
-        triggerButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (triggerButton.isChecked()) {
-                    stringAnswer.setText(OK_TEXT);
-                } else {
-                    stringAnswer.setText(null);
-                }
-            }
-        });
-
-        stringAnswer = new TextView(getContext());
-        stringAnswer.setId(ViewIds.generateViewId());
-        stringAnswer.setTextSize(TypedValue.COMPLEX_UNIT_DIP, getAnswerFontSize());
-        stringAnswer.setGravity(Gravity.CENTER);
-
-        String s = prompt.getAnswerText();
-        if (s != null) {
-            if (s.equals(OK_TEXT)) {
-                triggerButton.setChecked(true);
-            } else {
-                triggerButton.setChecked(false);
-            }
-            stringAnswer.setText(s);
-
-        }
-
-        // finish complex layout
-        addAnswerView(triggerButton);
+    public TriggerWidget(Context context, QuestionDetails prompt, Dependencies dependencies) {
+        super(context, dependencies, prompt);
+        render();
     }
 
-    public FormEntryPrompt getFormEntryPrompt() {
-        return prompt;
+    @Override
+    protected View onCreateWidgetView(Context context, FormEntryPrompt prompt, int answerTextSize) {
+        ViewGroup answerView = (ViewGroup) LayoutInflater.from(context).inflate(R.layout.trigger_widget_answer, null);
+
+        triggerButton = answerView.findViewById(R.id.check_box);
+        triggerButton.setTextSize(TypedValue.COMPLEX_UNIT_DIP, answerTextSize);
+        triggerButton.setEnabled(!prompt.isReadOnly());
+        triggerButton.setChecked(OK_TEXT.equals(prompt.getAnswerText()));
+        triggerButton.setOnCheckedChangeListener((buttonView, isChecked) -> widgetValueChanged());
+        triggerButton.setId(View.generateViewId());
+
+        return answerView;
     }
 
     @Override
     public void clearAnswer() {
-        stringAnswer.setText(null);
         triggerButton.setChecked(false);
+        widgetValueChanged();
     }
 
     @Override
     public IAnswerData getAnswer() {
-        String s = stringAnswer.getText().toString();
-        return !s.isEmpty()
-                ? new StringData(s)
-                : null;
+        return triggerButton.isChecked() ? new StringData(OK_TEXT) : null;
     }
 
     @Override
     public void setOnLongClickListener(OnLongClickListener l) {
         triggerButton.setOnLongClickListener(l);
-        stringAnswer.setOnLongClickListener(l);
     }
 
     @Override
     public void cancelLongPress() {
         super.cancelLongPress();
         triggerButton.cancelLongPress();
-        stringAnswer.cancelLongPress();
     }
 
-    public CheckBox getTriggerButton() {
+    public CheckBox getCheckBox() {
         return triggerButton;
     }
+
 }

@@ -1,7 +1,12 @@
-apply plugin: 'com.android.application'
-apply plugin: 'io.fabric'
+plugins {
+    alias(libs.plugins.androidApplication)
+    alias(libs.plugins.kotlinKsp)
+    alias(libs.plugins.kotlinParcelize)
+    alias(libs.plugins.ossLicenses)
+    alias(libs.plugins.safeargs)
+    alias(libs.plugins.composeCompiler)
+}
 apply from: '../config/quality.gradle'
-apply from: '../config/jacoco.gradle'
 
 import com.android.ddmlib.DdmPreferences
 
@@ -14,34 +19,9 @@ ant.condition(property: 'os', value: 'unix') {
     os(family: 'unix')
 }
 
-// Build numbers were manually set until 1067
-def LEGACY_BUILD_NUMBER_OFFSET = 1067
-
-// Based on http://stackoverflow.com/questions/17097263#24121734
-def getMasterCommitCount = { ->
-    try {
-        def stdout = new ByteArrayOutputStream()
-        exec {
-            switch (ant.properties.os) {
-                case 'windows':
-                    commandLine 'cmd', '/c', 'git', 'rev-list', '--first-parent', '--count', 'master'
-                    break
-                case 'unix':
-                    commandLine 'git', 'rev-list', '--first-parent', '--count', 'master'
-                    break
-            }
-            standardOutput = stdout
-        }
-        return Integer.parseInt(stdout.toString().trim())
-    } catch (ignored) {
-        return -1
-    }
-}
-
 def getVersionName = { ->
     try {
-        def stdout = new ByteArrayOutputStream()
-        exec {
+        return providers.exec {
             switch (ant.properties.os) {
                 case 'windows':
                     commandLine 'cmd', '/c', 'git', 'describe', '--tags', '--dirty', '--always'
@@ -50,33 +30,42 @@ def getVersionName = { ->
                     commandLine 'git', 'describe', '--tags', '--dirty', '--always'
                     break
             }
-            standardOutput = stdout
-        }
-        return stdout.toString().trim()
-    } catch (ignored) {
-        return null
+        }.getStandardOutput().getAsText().get().trim()
+    } catch (Exception ignored) {
+        return "v0"
     }
 }
 
-def secretsFile = file('secrets.properties')
-def secrets = new Properties()
-if (secretsFile.exists()) {
-    secrets.load(new FileInputStream(secretsFile))
-}
-
+def secrets = getSecrets()
+def googleMapsApiKey = secrets.getProperty('GOOGLE_MAPS_API_KEY', '')
+def mapboxAccessToken = secrets.getProperty('MAPBOX_ACCESS_TOKEN', '')
+def entitiesFilterProjectUrl = secrets.getProperty('ENTITIES_FILTER_PROJECT_URL', '')
+def entitiesFilterSearchProjectUrl = secrets.getProperty('ENTITIES_FILTER_SEARCH_PROJECT_URL', '')
+def thousandMediaFileProjectUrl = secrets.getProperty('THOUSAND_MEDIA_FILE_PROJECT_URL', '')
+def thousandMediaFileEntityListProjectUrl = secrets.getProperty('THOUSAND_MEDIA_FILE_ENTITY_LIST_PROJECT_URL', '')
+def cartoApiKey = secrets.getProperty('CARTO_API_KEY', null)
 android {
-    compileSdkVersion(28)
+    compileSdk libs.versions.compileSdk.get().toInteger()
+
+    buildFeatures {
+        viewBinding true
+        buildConfig true
+        compose true
+        resValues true
+    }
 
     defaultConfig {
         applicationId('org.odk.collect.android')
-        minSdkVersion(16)
-        targetSdkVersion(26)
-        versionCode LEGACY_BUILD_NUMBER_OFFSET + getMasterCommitCount()
+        minSdk libs.versions.minSdk.get().toInteger()
+        targetSdkVersion libs.versions.targetSdk.get().toInteger()
+        versionCode project.hasProperty('versionCode') ? project.getProperties()['versionCode'].toInteger() : 5112
         versionName getVersionName()
-        testInstrumentationRunner('android.support.test.runner.AndroidJUnitRunner')
-        multiDexEnabled true
+        testInstrumentationRunner('androidx.test.runner.AndroidJUnitRunner')
         vectorDrawables.useSupportLibrary = true
-        archivesBaseName = 'collect'
+    }
+
+    base {
+        archivesName = "ODK-Collect"
     }
 
     signingConfigs {
@@ -88,80 +77,142 @@ android {
                 keyPassword secrets.getProperty('RELEASE_KEY_PASSWORD')
             }
         }
+
+        selfSignedRelease {
+            storeFile file('../debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
     }
 
     buildTypes {
+
         // Release build for all forks
         release {
             if (secrets.getProperty('RELEASE_STORE_FILE')) {
                 signingConfig signingConfigs.release
             }
             minifyEnabled(true)
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
-            resValue("bool", "FIREBASE_CRASHLYTICS_ENABLED", "false")
+            shrinkResources(true)
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.txt'
+            resValue("string", "GOOGLE_MAPS_API_KEY", googleMapsApiKey)
+            resValue("string", "mapbox_access_token", mapboxAccessToken)
+            buildConfigField("String", "CARTO_API_KEY", cartoApiKey != null ? "\"${cartoApiKey}\"" : "null")
+            buildConfigField("String", "SIGNATURE", "\"\"")
         }
-        // Release build for the original ODK Collect app
+
+        // Release build for the official ODK Collect app
         odkCollectRelease {
             if (secrets.getProperty('RELEASE_STORE_FILE')) {
                 signingConfig signingConfigs.release
             }
             minifyEnabled(true)
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
-            resValue("bool", "FIREBASE_CRASHLYTICS_ENABLED", "true")
+            shrinkResources(true)
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.txt'
+            resValue("string", "GOOGLE_MAPS_API_KEY", googleMapsApiKey)
+            resValue("string", "mapbox_access_token", mapboxAccessToken)
+            buildConfigField("String", "CARTO_API_KEY", cartoApiKey != null ? "\"${cartoApiKey}\"" : "null")
+            buildConfigField("String", "SIGNATURE", "\"DC:D4:B9:4B:1E:0C:3D:96:69:22:3D:45:CD:C0:E2:F0:CC:6D:ED:12:A7:E6:EF:AB:49:BA:36:B3:D1:D4:8D:D8\"")
+
+            matchingFallbacks = ['release'] // So other modules use release build type for this
         }
+
+        selfSignedRelease {
+            signingConfig signingConfigs.selfSignedRelease
+
+            minifyEnabled(true)
+            shrinkResources(true)
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.txt'
+            resValue("string", "GOOGLE_MAPS_API_KEY", googleMapsApiKey)
+            resValue("string", "mapbox_access_token", mapboxAccessToken)
+            buildConfigField("String", "CARTO_API_KEY", cartoApiKey != null ? "\"${cartoApiKey}\"" : "null")
+            buildConfigField("String", "SIGNATURE", "\"\"")
+
+            matchingFallbacks = ['release'] // So other modules use release build type for this
+        }
+
         debug {
             debuggable(true)
-            testCoverageEnabled(true)
-            resValue("bool", "FIREBASE_CRASHLYTICS_ENABLED", "false")
+            resValue("string", "GOOGLE_MAPS_API_KEY", googleMapsApiKey)
+            resValue("string", "mapbox_access_token", mapboxAccessToken)
+            buildConfigField("String", "CARTO_API_KEY", cartoApiKey != null ? "\"${cartoApiKey}\"" : "null")
+            buildConfigField("String", "ENTITIES_FILTER_PROJECT_URL", "\"$entitiesFilterProjectUrl\"")
+            buildConfigField("String", "ENTITIES_FILTER_SEARCH_PROJECT_URL", "\"$entitiesFilterSearchProjectUrl\"")
+            buildConfigField("String", "THOUSAND_MEDIA_FILE_PROJECT_URL", "\"$thousandMediaFileProjectUrl\"")
+            buildConfigField("String", "THOUSAND_MEDIA_FILE_ENTITY_LIST_PROJECT_URL", "\"$thousandMediaFileEntityListProjectUrl\"")
+            buildConfigField("String", "SIGNATURE", "\"\"")
         }
     }
 
-    // https://stackoverflow.com/a/27119543/152938
-    applicationVariants.all { variant ->
-        variant.outputs.all { output ->
-            outputFileName = new File(outputFileName.replace(".apk", "-${defaultConfig.versionName}.apk"))
-        }
-    }
-    testVariants.all { variant ->
-        variant.outputs.all { output ->
-            outputFileName = new File(outputFileName.replace(".apk", "-${defaultConfig.versionName}.apk"))
+    androidComponents {
+        onVariants(selector().all()) { variant ->
+            if (variant.name == "selfSignedRelease" || variant.name == "odkCollectRelease") {
+                variant.outputs.forEach { output ->
+                    output.outputFileName.set(output.outputFileName.get().replace("${variant.name}.apk", "${defaultConfig.versionName}.apk"))
+                }
+            }
         }
     }
 
-    packagingOptions {
-        // Pick first occurrence of any files that cause conflicts, as defined
-        // in common.gradle
-        pickFirst 'META-INF/DEPENDENCIES'
-        pickFirst 'META-INF/LICENSE'
-        pickFirst 'META-INF/LICENSE.txt'
-        pickFirst 'META-INF/NOTICE'
-        pickFirst 'META-INF/NOTICE.txt'
-        pickFirst 'META-INF/services/com.fasterxml.jackson.core.JsonFactory'
-        pickFirst 'META-INF/services/com.fasterxml.jackson.core.ObjectCodec'
-        pickFirst 'META-INF/services/javax.ws.rs.ext.MessageBodyReader'
-        pickFirst 'META-INF/services/javax.ws.rs.ext.MessageBodyWriter'
+    packaging {
+        jniLibs {
+            // Without useLegacyPackaging, native libraries (.so) can grow by several MB
+            // after upgrading to AGP 9. Legacy packaging keeps them as built, avoiding
+            // extra padding and alignment, which keeps the APK smaller.
+            useLegacyPackaging = true
+        }
+        resources {
+            // These library licenses will be referenced in-app
+            excludes += ['META-INF/ASL-2.0.txt', 'META-INF/LGPL-3.0.txt']
+
+            // Pick first occurrence of any files that cause conflicts
+            pickFirsts += ['META-INF/DEPENDENCIES', 'META-INF/FastDoubleParser-LICENSE', 'META-INF/LICENSE', 'META-INF/LICENSE.txt', 'META-INF/NOTICE', 'META-INF/NOTICE.txt', 'META-INF/services/com.fasterxml.jackson.core.JsonFactory', 'META-INF/services/com.fasterxml.jackson.core.ObjectCodec', 'META-INF/services/javax.ws.rs.ext.MessageBodyReader', 'META-INF/services/javax.ws.rs.ext.MessageBodyWriter', 'draftv4/schema', 'draftv3/schema']
+        }
+
+        // To ensure that ODK Collect is installable on all devices, we don't use
+        // abiFilters to exclude any ABIs; but to keep the APK slim, we include
+        // the MapLibre native library only for 32-bit and 64-bit ARM devices and
+        // omit it for all X86 devices.
+        if (!project.hasProperty("x86Libs")) {
+            exclude 'lib/x86/libmaplibre.so'
+            exclude 'lib/x86_64/libmaplibre.so'
+        }
+
+        /* Exclude large properties files used by BouncyCastle's Picnic implementation (which
+           Collect doesn't use). */
+        exclude 'org/bouncycastle/pqc/crypto/picnic/lowmcL5.bin.properties'
+        exclude 'org/bouncycastle/pqc/crypto/picnic/lowmcL3.bin.properties'
+        exclude 'org/bouncycastle/pqc/crypto/picnic/lowmcL1.bin.properties'
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-
-    dexOptions {
-        javaMaxHeapSize '2048M'
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     testOptions {
         unitTests {
             includeAndroidResources = true
             returnDefaultValues = true
+
             all {
-                // https://discuss.circleci.com/t/11207/24
-                // it seems any number works, but 1024 - 2048 seem reasonable
-                maxHeapSize = "2048M"
+                minHeapSize = '512m'
+                maxHeapSize = project.properties['test.heap.max']
             }
         }
     }
+
+    lint {
+        abortOnError true
+        checkDependencies true
+        checkGeneratedSources true
+        htmlReport true
+        lintConfig file("$rootDir/config/lint.xml")
+        xmlReport true
+    }
+    namespace 'org.odk.collect.android'
 }
 
 configurations.all {
@@ -169,162 +220,192 @@ configurations.all {
         cacheDynamicVersionsFor(0, 'seconds')
         cacheChangingModulesFor(0, 'seconds')
 
-        force('com.google.code.findbugs:jsr305:1.3.9')
-    }
-    transitive = true
-}
-
-allprojects {
-    tasks.withType(JavaCompile) {
-        options.compilerArgs << '-Xlint:all'
+        force 'org.hamcrest:hamcrest:3.0'
     }
 }
 
 dependencies {
-    implementation fileTree(dir: 'libs', include: '*.jar')
-    implementation "com.android.support:support-v13:${rootProject.supportLibraryVersion}"
-    implementation "com.android.support:customtabs:${rootProject.supportLibraryVersion}"
-    implementation "com.android.support:design:${rootProject.supportLibraryVersion}"
-    implementation "com.android.support:appcompat-v7:${rootProject.supportLibraryVersion}"
-    implementation "com.android.support:design:${rootProject.supportLibraryVersion}"
-    implementation "com.android.support:cardview-v7:${rootProject.supportLibraryVersion}"
-    implementation "com.android.support:exifinterface:${rootProject.supportLibraryVersion}"
-    implementation "com.android.support:multidex:1.0.3"
-    
-    implementation "com.google.android.gms:play-services-analytics:16.0.1"
-    implementation "com.google.android.gms:play-services-auth:16.0.0"
-    implementation "com.google.android.gms:play-services-maps:15.0.1"
-    implementation "com.google.android.gms:play-services-location:15.0.1"
+    coreLibraryDesugaring libs.desugar
 
-    implementation "com.google.firebase:firebase-core:16.0.1"
-    implementation "com.crashlytics.sdk.android:crashlytics:2.9.2"
-
-    implementation("com.google.guava:guava:26.0-android")
-
-    implementation("com.google.code.gson:gson:2.6.2") {
-        exclude group: 'org.apache.httpcomponents'
+    implementation project(':shared')
+    implementation project(':androidshared')
+    implementation project(':nbistubs')
+    implementation project(':icons')
+    implementation project(':strings')
+    implementation project(':material')
+    implementation project(':async')
+    implementation project(':analytics')
+    implementation project(':audio-clips')
+    implementation project(':forms')
+    implementation project(':audio-recorder')
+    implementation project(':projects')
+    implementation project(':location')
+    implementation project(':geo')
+    implementation project(':image-loader')
+    implementation project(':errors')
+    implementation project(':upgrade')
+    implementation project(':permissions')
+    implementation(project(':settings')) {
+        exclude group: 'joda-time'
     }
+    implementation project(':external-app')
+    implementation project(':maps')
+    implementation project(':entities')
+    implementation project(':crash-handler')
+    implementation project(':selfie-camera')
+    implementation project(':qr-code')
+    implementation project(':metadata')
+    implementation project(':google-maps')
+    implementation project(':draw')
+    implementation project(':printer')
+    implementation project(':lists')
+    implementation project(':web-page')
+    implementation project(':db')
+    implementation project(':open-rosa')
+    implementation project(':mobile-device-management')
+    implementation project(':timedgrid')
+    implementation project(':maplibre')
 
-    implementation("com.google.http-client:google-http-client:1.22.0") {
-        exclude group: 'org.apache.httpcomponents'
-    }
-    implementation("com.google.oauth-client:google-oauth-client:1.22.0") {
-        exclude group: 'org.apache.httpcomponents'
-    }
+    implementation libs.androidxStartup
+    implementation libs.androidxCoreKtx
+    implementation libs.androidxBrowser
+    implementation libs.androidxAppcompat
+    implementation libs.androidxWorkRuntime
 
-    implementation 'bikramsambat:bikram-sambat:1.0.0'
-    implementation "com.evernote:android-job:1.2.5"
-    implementation "com.rarepebble:colorpicker:2.3.1"
-    implementation "commons-io:commons-io:2.6"
-    implementation "net.sf.kxml:kxml2:2.3.0"
-    implementation "net.sf.opencsv:opencsv:2.3"
-    implementation("org.opendatakit:opendatakit-javarosa:2.12.0-SNAPSHOT") {
+    implementation libs.androidxPreferenceKtx
+    implementation libs.androidxFragmentKtx
+
+    implementation libs.androidFlexbox
+
+    implementation libs.playServicesMaps
+    implementation libs.playServicesLocation
+    implementation libs.playServicesOssLicenses
+
+    implementation libs.firebaseAnalytics
+    implementation libs.firebaseCrashlytics
+
+    implementation (libs.persianJodaTime) {
+        exclude group: "com.android.support"
+    }
+    implementation libs.myanmarCalendar
+    implementation files('libs/bikram-sambat-1.8.1.jar')
+    implementation libs.commonsIo
+    implementation (libs.opencsv) {
+        exclude group: 'commons-logging'
+    }
+    implementation(libs.javarosa) {
+        exclude group: 'commons-io'
         exclude group: 'joda-time'
         exclude group: 'org.slf4j'
+        exclude group: 'org.hamcrest', module: 'hamcrest-all'
     }
-    implementation "com.karumi:dexter:4.2.0"
-    implementation "org.osmdroid:osmdroid-android:5.6.4"
-    implementation "org.slf4j:slf4j-android:1.6.1-RC1"
-    implementation("com.google.api-client:google-api-client-android:1.22.0") {
-        exclude group: 'org.apache.httpcomponents'
-        exclude group: 'com.google.guava'
-    }
-    implementation("com.google.apis:google-api-services-drive:v3-rev64-1.22.0") {
-        exclude group: 'org.apache.httpcomponents'
-        exclude group: 'com.google.guava'
-    }
-    implementation("com.google.apis:google-api-services-sheets:v4-rev463-1.22.0") {
-        exclude group: 'org.apache.httpcomponents'
-        exclude group: 'com.google.guava'
+    implementation libs.gson
+    implementation libs.timber
+    implementation libs.slf4jApi
+    implementation libs.slf4jTimber
 
-    }
-    implementation "com.jakewharton.timber:timber:4.7.0"
-    implementation "com.google.zxing:core:3.3.0"
-    implementation "com.journeyapps:zxing-android-embedded:3.5.0"
-    implementation "net.danlew:android.joda:2.9.9"
+    implementation libs.zxingAndroidEmbedded
 
-    // Real LeakCanary for debug builds only: notifications, analysis, etc
-    debugImplementation "com.squareup.leakcanary:leakcanary-android:${rootProject.leakyCanaryVersion}"
-    // No-Op version of LeakCanary for release builds: no notifications, no analysis, nothing
-    releaseImplementation "com.squareup.leakcanary:leakcanary-android-no-op:${rootProject.leakyCanaryVersion}"
-    testImplementation "com.squareup.leakcanary:leakcanary-android-no-op:${rootProject.leakyCanaryVersion}"
-    androidTestImplementation "com.squareup.leakcanary:leakcanary-android-no-op:${rootProject.leakyCanaryVersion}"
-    odkCollectReleaseImplementation "com.squareup.leakcanary:leakcanary-android-no-op:${rootProject.leakyCanaryVersion}"
+    implementation libs.danlewAndroidJoda
+
+    implementation(libs.jsoup)
 
     // Android Architecture Components:
-    implementation "android.arch.lifecycle:extensions:1.1.1"
+    implementation libs.androidxLifecycleRuntimeKtx
+    implementation libs.androidxLifecycleLivedataKtx
+    implementation libs.androidxLifecycleViewmodelCompose
+    implementation libs.androidxViewpager2
 
     // Dagger:
-    implementation "com.google.dagger:dagger-android:${rootProject.daggerVersion}"
-    implementation "com.google.dagger:dagger-android-support:${rootProject.daggerVersion}"
-    annotationProcessor "com.google.dagger:dagger-android-processor:${rootProject.daggerVersion}"
-    annotationProcessor "com.google.dagger:dagger-compiler:${rootProject.daggerVersion}"
-    testAnnotationProcessor "com.google.dagger:dagger-compiler:${rootProject.daggerVersion}"
+    implementation libs.dagger
+    ksp libs.daggerCompiler
 
-    // RxJava 2:
-    implementation "io.reactivex.rxjava2:rxandroid:2.0.2"
-    implementation "io.reactivex.rxjava2:rxjava:2.1.10"
+    // Needed for injection into Robolectric tests
+    kspTest libs.daggerCompiler
 
-    // Better "Subjects" for Rx:
-    implementation "com.jakewharton.rxrelay2:rxrelay:2.0.0"
+    // Dagger Android:
+    implementation libs.daggerAndroid
+    ksp libs.daggerAndroidProcessor
 
-    // Android bindings for Rx:
-    implementation "com.jakewharton.rxbinding2:rxbinding:2.0.0"
+    implementation libs.armen101AudioRecorderView
 
-    // RxLifecycle (binds subscription cleanup to component lifecycle):
-    implementation "com.trello.rxlifecycle2:rxlifecycle:${rootProject.rxLifecycleVersion}"
-    implementation "com.trello.rxlifecycle2:rxlifecycle-android:${rootProject.rxLifecycleVersion}"
-    implementation "com.trello.rxlifecycle2:rxlifecycle-android-lifecycle:${rootProject.rxLifecycleVersion}"
-
-    // WorkManager for specifying deferrable, asynchronous tasks
-    implementation("android.arch.work:work-runtime:${rootProject.workManagerVersion}") {
-        exclude group: 'com.google.guava', module: 'listenablefuture'
-    }
-    // Optional JobDispatcher support so devices with Play Services do better than AlarmManager
-    implementation("android.arch.work:work-firebase:${rootProject.workManagerVersion}") {
-        exclude group: 'com.google.guava', module: 'listenablefuture'
+    implementation(libs.mp4parserMuxer) {
+        exclude group: 'org.hamcrest'
     }
 
-    // Makes binding to Views easy:
-    implementation "com.jakewharton:butterknife:8.8.1"
-    annotationProcessor "com.jakewharton:butterknife-compiler:8.8.1"
+    implementation libs.splashscreen
+    implementation libs.androidxNavigationFragmentKtx
 
-    // Annotations understood by FindBugs
-    compileOnly 'com.google.code.findbugs:annotations:3.0.1'
-    compileOnly 'com.google.code.findbugs:jsr305:3.0.2'
+    var composeBom = platform(libs.androidxComposeBom)
+    implementation(composeBom)
+    implementation(libs.androidXComposeMaterial)
+    implementation(libs.androidXConstraintLayoutCompose)
+    implementation(libs.androidXComposeMaterialIconsExtended)
+    implementation(libs.androidXComposePreview)
+    implementation(libs.coil)
+    implementation(libs.coil.gif)
 
-    // Used to generate documentation screenshots.
-    androidTestImplementation "tools.fastlane:screengrab:1.1.0"
+    testImplementation project(':forms-test')
 
     // Testing-only dependencies
-    testImplementation "junit:junit:4.12"
-    testImplementation "org.mockito:mockito-core:2.8.47"
-    testImplementation "org.robolectric:robolectric:4.0-beta-1"
-    testImplementation "org.robolectric:shadows-multidex:4.0-beta-1"
+    testImplementation libs.junit
+    testImplementation libs.mockitoCore
+    testImplementation libs.mockitoKotlin
 
-    // power mock (for mocking final methods which is not handled by mockito)
-    testImplementation "org.powermock:powermock-module-junit4:1.6.4"
-    testImplementation "org.powermock:powermock-api-mockito2:1.7.3"
+    testImplementation project(':androidtest')
+    testImplementation(project(path: ':test-shared')) {
+        exclude group: 'org.robolectric' // Some tests in `collect_app` don't work with newer Robolectric
+    }
+    testImplementation(project(":shadows"))
+    testImplementation(project(":test-forms"))
 
-    androidTestImplementation "org.mockito:mockito-android:2.11.0"
-    androidTestImplementation("com.android.support.test:runner:1.0.1") {
+    testImplementation libs.androidXComposeUiTestJunit4
+    testImplementation libs.robolectric
+    testImplementation libs.androidxTestExtJunit
+    testImplementation libs.androidxArchCoreTesting
+
+    testImplementation libs.hamcrest
+
+    testImplementation libs.androidxTestEspressoCore
+    testImplementation libs.androidxTestEspressoIntents
+    testImplementation libs.androidxTestCoreKtx
+
+    androidTestImplementation project(':androidtest')
+    androidTestImplementation project(':test-forms')
+
+    androidTestImplementation(composeBom)
+    androidTestImplementation libs.androidXComposeUiTestJunit4
+    androidTestImplementation libs.caverockAndroidsvg
+    androidTestImplementation libs.mockitoAndroid
+    androidTestImplementation libs.androidxTestExtJunit
+    androidTestImplementation libs.androidxTestEspressoCore
+    androidTestImplementation libs.androidxArchCoreTesting
+    androidTestImplementation libs.androidxTestEspressoContrib
+    androidTestImplementation(libs.androidxTestEspressoIntents) {
         exclude group: 'com.android.support', module: 'support-annotations'
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
     }
 
-    androidTestImplementation("com.android.support.test.espresso:espresso-intents:3.0.1") {
-        exclude group: 'com.android.support', module: 'support-annotations'
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
+    androidTestImplementation libs.androidxWorkTesting
+    androidTestImplementation libs.uiautomator
+    androidTestImplementation libs.mockitoKotlin
+    androidTestImplementation libs.hamcrest
+
+    debugImplementation project(':fragments-test')
+    debugImplementation(project(':test-shared')) {
+        exclude group: 'org.robolectric' // Some tests in `collect_app` don't work with newer Robolectric
     }
 
-    androidTestImplementation "com.squareup.okhttp3:mockwebserver:3.9.0"
-
-    androidTestImplementation "android.arch.work:work-testing:${rootProject.workManagerVersion}"
+    // Real LeakCanary for debug and selfSigned builds only: notifications, analysis, etc
+    debugImplementation libs.leakcanary
+    debugImplementation(libs.androidXComposeTooling)
+    debugImplementation(libs.androidXComposeUiTestManifest)
+    selfSignedReleaseImplementation libs.leakcanary
 }
 
 // Must be at bottom to prevent dependency collisions
 // https://developers.google.com/android/guides/google-services-plugin
 apply plugin: 'com.google.gms.google-services'
 
-
-
+// Must be after google-services to prevent build failure
+// https://stackoverflow.com/a/67995305
+apply plugin: 'com.google.firebase.crashlytics'

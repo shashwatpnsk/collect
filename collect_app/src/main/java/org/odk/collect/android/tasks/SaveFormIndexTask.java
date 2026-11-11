@@ -19,40 +19,37 @@ package org.odk.collect.android.tasks;
 import android.os.AsyncTask;
 
 import org.javarosa.core.model.FormIndex;
-import org.odk.collect.android.application.Collect;
-import org.odk.collect.android.logic.FormController;
+import org.odk.collect.android.javarosawrapper.FormController;
+import org.odk.collect.android.utilities.FileUtils;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
+import java.nio.charset.StandardCharsets;
 
 import timber.log.Timber;
 
 public class SaveFormIndexTask extends AsyncTask<Void, Void, String> {
 
     private final SaveFormIndexListener listener;
-    private final FormIndex formIndex;
+    private final String xpath;
+    private final File instanceFile;
 
     public interface SaveFormIndexListener {
         void onSaveFormIndexError(String errorMessage);
     }
 
-    public SaveFormIndexTask(SaveFormIndexListener listener, FormIndex formIndex) {
+    public SaveFormIndexTask(SaveFormIndexListener listener, String xpath, File instanceFile) {
         this.listener = listener;
-        this.formIndex = formIndex;
+        this.xpath = xpath;
+        this.instanceFile = instanceFile;
     }
 
     @Override
     protected String doInBackground(Void... params) {
         long start = System.currentTimeMillis();
 
-        FormController formController = Collect.getInstance().getFormController();
-
         try {
-            File tempFormIndexFile = SaveToDiskTask.getFormIndexFile(formController.getInstanceFile().getName());
-            exportFormIndexToFile(formIndex, tempFormIndexFile);
+            File tempFormIndexFile = SaveFormToDisk.getFormIndexFile(instanceFile.getName());
+            exportFormIndexToFile(xpath, tempFormIndexFile);
 
             long end = System.currentTimeMillis();
             Timber.i("SaveFormIndex ms: %s to %s", Long.toString(end - start), tempFormIndexFile.toString());
@@ -74,31 +71,26 @@ public class SaveFormIndexTask extends AsyncTask<Void, Void, String> {
         }
     }
 
-    public static void exportFormIndexToFile(FormIndex formIndex, File savepointIndexFile) {
+    public static void exportFormIndexToFile(String xpath, File savepointIndexFile) {
         try {
-            ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(savepointIndexFile));
-            oos.writeObject(formIndex);
-            oos.flush();
-            oos.close();
+            FileUtils.write(savepointIndexFile, xpath.getBytes(StandardCharsets.UTF_8));
         } catch (Exception e) {
             Timber.e(e);
         }
     }
 
-    public static FormIndex loadFormIndexFromFile() {
-        FormIndex formIndex = null;
+    public static FormIndex loadFormIndexFromFile(FormController formController) {
         try {
-            String instanceName = Collect.getInstance()
-                    .getFormController()
+            String instanceName = formController
                     .getInstanceFile()
                     .getName();
-            ObjectInputStream ois = new ObjectInputStream(new FileInputStream(SaveToDiskTask.getFormIndexFile(instanceName)));
-            formIndex = (FormIndex) ois.readObject();
-            ois.close();
+            File savepointIndexFile = SaveFormToDisk.getFormIndexFile(instanceName);
+            String xpath = new String(FileUtils.read(savepointIndexFile), StandardCharsets.UTF_8);
+
+            return xpath.isEmpty() ? null : formController.getIndexFromXPath(xpath);
         } catch (Exception e) {
             Timber.e(e);
+            return null;
         }
-
-        return formIndex;
     }
 }

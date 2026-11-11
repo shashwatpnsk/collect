@@ -14,15 +14,16 @@
 
 package org.odk.collect.android.listeners;
 
-import org.odk.collect.android.logic.FormDetails;
+import org.odk.collect.android.formmanagement.download.FormDownloadException;
+import org.odk.collect.android.formmanagement.ServerFormDetails;
 
-import java.util.HashMap;
+import java.util.Map;
 
 /**
  * @author Carl Hartung (carlhartung@gmail.com)
  */
 public interface DownloadFormsTaskListener {
-    void formsDownloadingComplete(HashMap<FormDetails, String> result);
+    void formsDownloadingComplete(Map<ServerFormDetails, FormDownloadException> result);
 
     void progressUpdate(String currentFile, int progress, int total);
 

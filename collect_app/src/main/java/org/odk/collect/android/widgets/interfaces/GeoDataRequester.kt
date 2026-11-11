@@ -1,0 +1,13 @@
+package org.odk.collect.android.widgets.interfaces
+
+import org.javarosa.form.api.FormEntryPrompt
+import org.odk.collect.android.widgets.utilities.WaitingForDataRegistry
+
+interface GeoDataRequester {
+    fun requestGeoPoint(
+        prompt: FormEntryPrompt,
+        waitingForDataRegistry: WaitingForDataRegistry
+    )
+
+    fun requestGeoPoly(prompt: FormEntryPrompt)
+}

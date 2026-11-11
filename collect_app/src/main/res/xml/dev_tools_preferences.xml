@@ -1,0 +1,23 @@
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:title="@string/experimental">
+
+    <Preference
+        android:icon="@drawable/ic_outline_warning_accent_24"
+        android:title="@string/crash_app"
+        android:summary="@string/crash_app_summary"
+        android:key="crash_app"
+        app:persistent="false"/>
+
+    <SwitchPreferenceCompat
+        android:key="experimental_debug_filters"
+        android:title="@string/debug_filters"
+        android:summary="@string/debug_filters_summary"
+        app:iconSpaceReserved="false" />
+
+    <SwitchPreferenceCompat
+        android:key="zxing_scanning"
+        android:title="@string/use_zxing_for_barcode_scanning"
+        app:iconSpaceReserved="false" />
+
+</PreferenceScreen>

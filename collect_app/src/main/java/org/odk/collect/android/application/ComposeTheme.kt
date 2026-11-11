@@ -1,0 +1,78 @@
+package org.odk.collect.android.application
+
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import org.odk.collect.android.R
+import org.odk.collect.androidshared.ui.ComposeThemeProvider
+
+/**
+ * Changes to this theme should also be made in `theme.xml`
+ */
+@Composable
+fun CollectTheme(content: @Composable () -> Unit) {
+    val lightColors = lightColorScheme(
+        primary = colorResource(R.color.colorPrimaryLight),
+        onPrimary = colorResource(R.color.colorOnPrimaryLight),
+        surface = colorResource(R.color.colorSurfaceLight),
+        onSurface = colorResource(R.color.colorOnSurfaceLight),
+        primaryContainer = colorResource(R.color.colorPrimaryContainerLight),
+        onPrimaryContainer = colorResource(R.color.colorOnPrimaryContainerLight),
+        surfaceContainerHighest = colorResource(R.color.colorSurfaceContainerHighestLight)
+    )
+
+    val darkColors = darkColorScheme(
+        primary = colorResource(R.color.colorPrimaryDark),
+        onPrimary = colorResource(R.color.colorOnPrimaryDark),
+        surface = colorResource(R.color.colorSurfaceDark),
+        onSurface = colorResource(R.color.colorOnSurfaceDark),
+        primaryContainer = colorResource(R.color.colorPrimaryContainerDark),
+        onPrimaryContainer = colorResource(R.color.colorOnPrimaryContainerDark),
+        surfaceContainerHighest = colorResource(R.color.colorSurfaceContainerHighestDark)
+    )
+
+    val colorScheme = if (isSystemInDarkTheme()) darkColors else lightColors
+
+    val typography = Typography(
+        bodyMedium = MaterialTheme.typography.bodyMedium,
+        bodyLarge = MaterialTheme.typography.bodyLarge,
+        titleMedium = MaterialTheme.typography.titleMedium,
+        titleLarge = MaterialTheme.typography.titleLarge.copy(
+            fontSize = 20.sp,
+            lineHeight = 24.sp,
+            fontFamily = FontFamily.SansSerif,
+            fontWeight = FontWeight.Medium
+        ),
+        headlineSmall = MaterialTheme.typography.headlineSmall
+    )
+
+    val shapes = Shapes(
+        small = MaterialTheme.shapes.small,
+        medium = RoundedCornerShape(dimensionResource(R.dimen.mediumCornerSize)),
+        large = MaterialTheme.shapes.large
+    )
+
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = typography,
+        shapes = shapes,
+        content = content
+    )
+}
+
+interface CollectComposeThemeProvider : ComposeThemeProvider {
+    @Composable
+    override fun Theme(content: @Composable () -> Unit) {
+        CollectTheme { content() }
+    }
+}

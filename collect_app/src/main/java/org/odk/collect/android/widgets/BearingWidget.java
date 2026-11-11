@@ -14,155 +14,135 @@
 
 package org.odk.collect.android.widgets;
 
+import static org.odk.collect.android.utilities.ApplicationConstants.RequestCodes;
+
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.drawable.Drawable;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
-import android.text.InputType;
-import android.text.method.DigitsKeyListener;
-import android.util.TypedValue;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.TableLayout;
+import android.view.View;
+
+import androidx.core.content.ContextCompat;
 
 import org.javarosa.core.model.data.IAnswerData;
 import org.javarosa.core.model.data.StringData;
 import org.javarosa.form.api.FormEntryPrompt;
 import org.odk.collect.android.R;
 import org.odk.collect.android.activities.BearingActivity;
-import org.odk.collect.android.utilities.ToastUtils;
-import org.odk.collect.android.widgets.interfaces.BinaryWidget;
-
-import static org.odk.collect.android.utilities.ApplicationConstants.RequestCodes;
+import org.odk.collect.android.databinding.BearingWidgetAnswerBinding;
+import org.odk.collect.android.formentry.questions.QuestionDetails;
+import org.odk.collect.android.widgets.utilities.StringWidgetUtils;
+import org.odk.collect.androidshared.ui.ToastUtils;
+import org.odk.collect.android.widgets.interfaces.WidgetDataReceiver;
+import org.odk.collect.android.widgets.utilities.WaitingForDataRegistry;
 
 /**
  * BearingWidget is the widget that allows the user to get a compass heading.
- *
- * @author Carl Hartung (chartung@nafundi.com)
  */
 @SuppressLint("ViewConstructor")
-public class BearingWidget extends QuestionWidget implements BinaryWidget {
-    private final Button getBearingButton;
-    private final boolean isSensorAvailable;
-    private final EditText answer;
-    private final Drawable textBackground;
+public class BearingWidget extends QuestionWidget implements WidgetDataReceiver {
+    BearingWidgetAnswerBinding binding;
 
-    public BearingWidget(Context context, FormEntryPrompt prompt) {
-        super(context, prompt);
+    private final WaitingForDataRegistry waitingForDataRegistry;
+    private final SensorManager sensorManager;
 
-        isSensorAvailable = checkForRequiredSensors();
+    public BearingWidget(Context context, QuestionDetails questionDetails, WaitingForDataRegistry waitingForDataRegistry, SensorManager sensorManager, Dependencies dependencies) {
+        super(context, dependencies, questionDetails);
+        render();
 
-        LinearLayout answerLayout = new LinearLayout(getContext());
-        answerLayout.setOrientation(LinearLayout.VERTICAL);
+        this.waitingForDataRegistry = waitingForDataRegistry;
+        this.sensorManager = sensorManager;
+    }
 
-        answer = getEditText();
-        textBackground = answer.getBackground();
-        answer.setBackground(null);
+    @Override
+    protected View onCreateWidgetView(Context context, FormEntryPrompt prompt, int answerFontSize) {
+        binding = BearingWidgetAnswerBinding.inflate(((Activity) context).getLayoutInflater());
 
-        getBearingButton = getSimpleButton(getContext().getString(R.string.get_bearing));
-
-        answerLayout.addView(getBearingButton);
-        answerLayout.addView(answer);
-
-        String s = prompt.getAnswerText();
-        if (s != null && !s.equals("")) {
-            getBearingButton.setText(getContext().getString(R.string.replace_bearing));
-            if (!isSensorAvailable && answer != null) {
-                answer.setText(s);
-            }
-            setBinaryData(s);
+        if (prompt.isReadOnly()) {
+            binding.bearingButton.setVisibility(GONE);
+        } else {
+            binding.bearingButton.setOnClickListener(v -> onButtonClick());
         }
-        addAnswerView(answerLayout);
+        binding.widgetAnswerText.init(answerFontSize, true, null, false, false, this::widgetValueChanged);
+        Double answer = StringWidgetUtils.getDoubleAnswerValueFromIAnswerData(questionDetails.getPrompt().getAnswerValue());
+        binding.widgetAnswerText.setDecimalType(false, answer);
+
+        String answerText = prompt.getAnswerText();
+        binding.widgetAnswerText.setAnswer(answerText);
+        if (answerText != null && !answerText.isEmpty()) {
+            binding.bearingButton.setText(getContext().getString(org.odk.collect.strings.R.string.replace_bearing));
+        }
+
+        return binding.getRoot();
     }
 
     @Override
     public void clearAnswer() {
-        answer.setText(null);
-        getBearingButton.setText(getContext().getString(R.string.get_bearing));
+        binding.bearingButton.setText(getContext().getString(org.odk.collect.strings.R.string.get_bearing));
+        binding.widgetAnswerText.setAnswer(null);
     }
 
     @Override
     public IAnswerData getAnswer() {
-        String s = answer.getText().toString();
-
-        if (s.equals("")) {
-            return null;
-        } else {
-            return new StringData(s);
-        }
+        String answerText = binding.widgetAnswerText.getAnswer();
+        return answerText.isEmpty() ? null : new StringData(answerText);
     }
 
     @Override
-    public void setBinaryData(Object answer) {
-        this.answer.setText((String) answer);
+    public void setData(Object answer) {
+        binding.widgetAnswerText.setAnswer((String) answer);
+        binding.bearingButton.setText(getContext().getString(org.odk.collect.strings.R.string.replace_bearing));
     }
 
     @Override
     public void setOnLongClickListener(OnLongClickListener l) {
-        if (isSensorAvailable) {
-            getBearingButton.setOnLongClickListener(l);
-        }
-        answer.setOnLongClickListener(l);
+        binding.bearingButton.setOnLongClickListener(l);
+        binding.widgetAnswerText.setOnLongClickListener(l);
     }
 
     @Override
     public void cancelLongPress() {
         super.cancelLongPress();
-        if (isSensorAvailable) {
-            getBearingButton.cancelLongPress();
-        }
-        answer.cancelLongPress();
+        binding.bearingButton.cancelLongPress();
+        binding.widgetAnswerText.cancelLongPress();
     }
 
-    private boolean checkForRequiredSensors() {
-
-        boolean isAccelerometerSensorAvailable = false;
-        boolean isMagneticFieldSensorAvailable = false;
-
-        SensorManager sensorManager = (SensorManager) getContext().getSystemService(Context.SENSOR_SERVICE);
-        if (sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null) {
-            isAccelerometerSensorAvailable = true;
-        }
-        if (sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD) != null) {
-            isMagneticFieldSensorAvailable = true;
-        }
-
-        return isAccelerometerSensorAvailable && isMagneticFieldSensorAvailable;
+    private boolean areSensorsAvailable() {
+        return sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null
+                && sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD) != null;
     }
 
-    private EditText getEditText() {
-        final EditText manualData = new EditText(getContext());
-        manualData.setPadding(20, 20, 20, 20);
-        manualData.setTextSize(TypedValue.COMPLEX_UNIT_DIP, getAnswerFontSize());
-        manualData.setInputType(InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        manualData.setKeyListener(new DigitsKeyListener(true, true));
-        manualData.setFocusable(false);
-        manualData.setFocusableInTouchMode(false);
-        TableLayout.LayoutParams params = new TableLayout.LayoutParams();
-        params.setMargins(7, 5, 7, 5);
-        manualData.setLayoutParams(params);
+    private void onButtonClick() {
+        if (areSensorsAvailable()) {
+            Intent intent = new Intent(getContext(), BearingActivity.class);
+            ((Activity) getContext()).startActivityForResult(intent, RequestCodes.BEARING_CAPTURE);
 
-        return manualData;
+            waitingForDataRegistry.waitForData(getFormEntryPrompt().getIndex());
+        } else {
+            ToastUtils.showLongToast(org.odk.collect.strings.R.string.bearing_lack_of_sensors);
+
+            binding.bearingButton.setEnabled(false);
+            binding.widgetAnswerText.updateState(false);
+        }
     }
 
     @Override
-    public void onButtonClick(int buttonId) {
-        if (isSensorAvailable) {
-            Intent i = new Intent(getContext(), BearingActivity.class);
-            waitForData();
-            ((Activity) getContext()).startActivityForResult(i,
-                    RequestCodes.BEARING_CAPTURE);
+    public void hideError() {
+        super.hideError();
+        binding.widgetAnswerText.setError(null);
+    }
+
+    @Override
+    public void displayError(String errorMessage) {
+        hideError();
+
+        if (binding.widgetAnswerText.isEditableState()) {
+            binding.widgetAnswerText.setError(errorMessage);
+            setBackground(ContextCompat.getDrawable(getContext(), R.drawable.question_with_error_border));
         } else {
-            getBearingButton.setEnabled(false);
-            ToastUtils.showLongToast(R.string.bearing_lack_of_sensors);
-            answer.setBackground(textBackground);
-            answer.setFocusable(true);
-            answer.setFocusableInTouchMode(true);
-            answer.requestFocus();
+            super.displayError(errorMessage);
         }
     }
 }

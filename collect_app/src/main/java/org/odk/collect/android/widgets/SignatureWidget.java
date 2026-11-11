@@ -14,42 +14,51 @@
 
 package org.odk.collect.android.widgets;
 
+import static org.odk.collect.android.utilities.ApplicationConstants.RequestCodes;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.view.View;
-import android.widget.Button;
 import org.javarosa.form.api.FormEntryPrompt;
-import org.odk.collect.android.R;
-import org.odk.collect.android.activities.DrawActivity;
-
-import static org.odk.collect.android.utilities.ApplicationConstants.RequestCodes;
+import org.odk.collect.android.databinding.SignatureWidgetBinding;
+import org.odk.collect.draw.DrawActivity;
+import org.odk.collect.android.formentry.questions.QuestionDetails;
+import org.odk.collect.android.utilities.QuestionMediaManager;
+import org.odk.collect.android.widgets.utilities.WaitingForDataRegistry;
 
 /**
  * Signature widget.
  *
  * @author BehrAtherton@gmail.com
  */
+@SuppressLint("ViewConstructor")
 public class SignatureWidget extends BaseImageWidget {
+    SignatureWidgetBinding binding;
 
-    private Button signButton;
+    public SignatureWidget(Context context, QuestionDetails prompt, QuestionMediaManager questionMediaManager, WaitingForDataRegistry waitingForDataRegistry, String tmpImageFilePath, Dependencies dependencies) {
+        super(context, prompt, questionMediaManager, waitingForDataRegistry, tmpImageFilePath, dependencies);
+        imageClickHandler = new DrawImageClickHandler(DrawActivity.OPTION_SIGNATURE, RequestCodes.SIGNATURE_CAPTURE, org.odk.collect.strings.R.string.signature_capture);
 
-    public SignatureWidget(Context context, FormEntryPrompt prompt) {
-        super(context, prompt);
-        imageClickHandler = new DrawImageClickHandler(DrawActivity.OPTION_SIGNATURE, RequestCodes.SIGNATURE_CAPTURE, R.string.signature_capture);
-        setUpLayout();
-        setUpBinary();
-        addAnswerView(answerLayout);
+        render();
+        updateAnswer();
     }
 
     @Override
-    protected void setUpLayout() {
-        super.setUpLayout();
-        signButton = getSimpleButton(getContext().getString(R.string.sign_button));
+    protected View onCreateWidgetView(Context context, FormEntryPrompt prompt, int answerFontSize) {
+        binding = SignatureWidgetBinding.inflate(((Activity) context).getLayoutInflater());
+        binding.signButton.setOnClickListener(v -> imageClickHandler.clickImage("signButton"));
+        binding.image.setOnClickListener(v -> imageClickHandler.clickImage("viewImage"));
 
-        answerLayout.addView(signButton);
-        answerLayout.addView(errorTextView);
+        if (questionDetails.isReadOnly()) {
+            binding.signButton.setVisibility(View.GONE);
+        }
 
-        errorTextView.setVisibility(View.GONE);
+        errorTextView = binding.errorMessage;
+        imageView = binding.image;
+
+        return binding.getRoot();
     }
 
     @Override
@@ -60,24 +69,18 @@ public class SignatureWidget extends BaseImageWidget {
     @Override
     public void clearAnswer() {
         super.clearAnswer();
-        // reset buttons
-        signButton.setText(getContext().getString(R.string.sign_button));
+        binding.signButton.setText(getContext().getString(org.odk.collect.strings.R.string.sign_button));
     }
 
     @Override
     public void setOnLongClickListener(OnLongClickListener l) {
-        signButton.setOnLongClickListener(l);
+        binding.signButton.setOnLongClickListener(l);
         super.setOnLongClickListener(l);
     }
 
     @Override
     public void cancelLongPress() {
         super.cancelLongPress();
-        signButton.cancelLongPress();
-    }
-
-    @Override
-    public void onButtonClick(int buttonId) {
-        imageClickHandler.clickImage("signButton");
+        binding.signButton.cancelLongPress();
     }
 }

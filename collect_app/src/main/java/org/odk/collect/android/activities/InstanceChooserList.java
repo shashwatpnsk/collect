@@ -14,107 +14,165 @@
 
 package org.odk.collect.android.activities;
 
-import android.app.AlertDialog;
-import android.content.ContentUris;
-import android.content.DialogInterface;
+import static org.odk.collect.android.utilities.ApplicationConstants.SortingOrder.BY_DATE_ASC;
+import static org.odk.collect.android.utilities.ApplicationConstants.SortingOrder.BY_DATE_DESC;
+import static org.odk.collect.android.utilities.ApplicationConstants.SortingOrder.BY_NAME_ASC;
+import static org.odk.collect.android.utilities.ApplicationConstants.SortingOrder.BY_NAME_DESC;
+import static org.odk.collect.androidshared.ui.EdgeToEdge.setView;
+
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v4.app.LoaderManager;
-import android.support.v4.content.Loader;
 import android.view.View;
-import android.widget.AdapterView;
-import android.widget.SimpleCursorAdapter;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
+import androidx.loader.app.LoaderManager;
+import androidx.loader.content.Loader;
 
 import org.odk.collect.android.R;
-import org.odk.collect.android.adapters.ViewSentListAdapter;
-import org.odk.collect.android.application.Collect;
-import org.odk.collect.android.dao.InstancesDao;
-import org.odk.collect.android.listeners.DiskSyncListener;
-import org.odk.collect.android.listeners.PermissionListener;
-import org.odk.collect.android.provider.InstanceProviderAPI;
-import org.odk.collect.android.provider.InstanceProviderAPI.InstanceColumns;
-import org.odk.collect.android.tasks.InstanceSyncTask;
-import org.odk.collect.android.utilities.ApplicationConstants;
+import org.odk.collect.android.adapters.InstanceListCursorAdapter;
+import org.odk.collect.android.application.CollectComposeThemeProvider;
+import org.odk.collect.android.dao.CursorLoaderFactory;
+import org.odk.collect.android.database.instances.DatabaseInstanceColumns;
+import org.odk.collect.android.entities.EntitiesRepositoryProvider;
+import org.odk.collect.android.external.FormUriActivity;
+import org.odk.collect.android.external.InstancesContract;
+import org.odk.collect.android.formentry.FormOpeningMode;
+import org.odk.collect.android.formlists.sorting.FormListSortingOption;
+import org.odk.collect.android.formmanagement.drafts.BulkFinalizationViewModel;
+import org.odk.collect.android.formmanagement.drafts.DraftsMenuProvider;
+import org.odk.collect.android.injection.DaggerUtils;
+import org.odk.collect.android.instancemanagement.FinalizeAllSnackbarPresenter;
+import org.odk.collect.android.instancemanagement.InstancesDataService;
+import org.odk.collect.android.projects.ProjectsDataService;
+import org.odk.collect.android.utilities.FormsRepositoryProvider;
+import org.odk.collect.android.utilities.InstancesRepositoryProvider;
+import org.odk.collect.androidshared.ui.multiclicksafe.MultiClickGuard;
+import org.odk.collect.async.Scheduler;
+import org.odk.collect.db.sqlite.DatabaseConnection;
+import org.odk.collect.lists.EmptyListView;
+import org.odk.collect.material.MaterialProgressDialogFragment;
+import org.odk.collect.settings.SettingsProvider;
 
-import timber.log.Timber;
+import java.util.Arrays;
 
-import static org.odk.collect.android.utilities.PermissionUtils.finishAllActivities;
-import static org.odk.collect.android.utilities.PermissionUtils.requestStoragePermissions;
+import javax.inject.Inject;
 
 /**
  * Responsible for displaying all the valid instances in the instance directory.
  *
  * @author Yaw Anokwa (yanokwa@gmail.com)
  * @author Carl Hartung (carlhartung@gmail.com)
+ * @deprecated Uses {@link CursorLoaderFactory} and interacts with {@link DatabaseConnection} on the
+ * UI thread.
  */
-public class InstanceChooserList extends InstanceListActivity implements
-        DiskSyncListener, AdapterView.OnItemClickListener, LoaderManager.LoaderCallbacks<Cursor> {
+@Deprecated
+public class InstanceChooserList extends AppListActivity implements InstanceListCursorAdapter.OnItemClickListener, LoaderManager.LoaderCallbacks<Cursor>, CollectComposeThemeProvider {
     private static final String INSTANCE_LIST_ACTIVITY_SORTING_ORDER = "instanceListActivitySortingOrder";
     private static final String VIEW_SENT_FORM_SORTING_ORDER = "ViewSentFormSortingOrder";
 
-    private static final boolean EXIT = true;
-    private static final boolean DO_NOT_EXIT = false;
-
-    private InstanceSyncTask instanceSyncTask;
-
     private boolean editMode;
+
+    @Inject
+    ProjectsDataService projectsDataService;
+
+    @Inject
+    FormsRepositoryProvider formsRepositoryProvider;
+
+    @Inject
+    Scheduler scheduler;
+
+    @Inject
+    InstancesRepositoryProvider instancesRepositoryProvider;
+
+    @Inject
+    EntitiesRepositoryProvider entitiesRepositoryProvider;
+
+    @Inject
+    SettingsProvider settingsProvider;
+
+    @Inject
+    InstancesDataService instancesDataService;
+
+    private final ActivityResultLauncher<Intent> formLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+        setResult(RESULT_OK, result.getData());
+        finish();
+    });
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.chooser_list_layout);
+        setView(this, R.layout.form_chooser_list, false);
+        DaggerUtils.getComponent(this).inject(this);
 
-        String formMode = getIntent().getStringExtra(ApplicationConstants.BundleKeys.FORM_MODE);
-        if (formMode == null || ApplicationConstants.FormModes.EDIT_SAVED.equalsIgnoreCase(formMode)) {
-
-            setTitle(getString(R.string.review_data));
+        String formMode = getIntent().getStringExtra(FormOpeningMode.FORM_MODE_KEY);
+        if (formMode == null || FormOpeningMode.EDIT_SAVED.equalsIgnoreCase(formMode)) {
+            setTitle(getString(org.odk.collect.strings.R.string.review_data));
             editMode = true;
-            sortingOptions = new String[]{
-                    getString(R.string.sort_by_name_asc), getString(R.string.sort_by_name_desc),
-                    getString(R.string.sort_by_date_asc), getString(R.string.sort_by_date_desc),
-                    getString(R.string.sort_by_status_asc), getString(R.string.sort_by_status_desc)
-            };
         } else {
-            setTitle(getString(R.string.view_sent_forms));
-
-            sortingOptions = new String[]{
-                    getString(R.string.sort_by_name_asc), getString(R.string.sort_by_name_desc),
-                    getString(R.string.sort_by_date_asc), getString(R.string.sort_by_date_desc)
-            };
-            ((TextView) findViewById(android.R.id.empty)).setText(R.string.no_items_display_sent_forms);
+            setTitle(getString(org.odk.collect.strings.R.string.view_sent_forms));
+            EmptyListView emptyListView = findViewById(android.R.id.empty);
+            emptyListView.setIcon(R.drawable.ic_baseline_inbox_72);
+            emptyListView.setTitle(getString(org.odk.collect.strings.R.string.empty_list_of_sent_forms_title));
+            emptyListView.setSubtitle(getString(org.odk.collect.strings.R.string.empty_list_of_sent_forms_subtitle));
         }
 
-        requestStoragePermissions(this, new PermissionListener() {
-            @Override
-            public void granted() {
-                // must be at the beginning of any activity that can be called from an external intent
-                try {
-                    Collect.createODKDirs();
-                } catch (RuntimeException e) {
-                    createErrorDialog(e.getMessage(), EXIT);
-                    return;
-                }
-                init();
-            }
+        sortingOptions = Arrays.asList(
+                new FormListSortingOption(
+                        R.drawable.ic_sort_by_alpha,
+                        org.odk.collect.strings.R.string.sort_by_name_asc
+                ),
+                new FormListSortingOption(
+                        R.drawable.ic_sort_by_alpha,
+                        org.odk.collect.strings.R.string.sort_by_name_desc
+                ),
+                new FormListSortingOption(
+                        R.drawable.ic_access_time,
+                        org.odk.collect.strings.R.string.sort_by_date_desc
+                ),
+                new FormListSortingOption(
+                        R.drawable.ic_access_time,
+                        org.odk.collect.strings.R.string.sort_by_date_asc
+                )
+        );
 
-            @Override
-            public void denied() {
-                // The activity has to finish because ODK Collect cannot function without these permissions.
-                finishAllActivities(InstanceChooserList.this);
-            }
+        init();
+
+        BulkFinalizationViewModel bulkFinalizationViewModel = new BulkFinalizationViewModel(
+                projectsDataService.requireCurrentProject().getUuid(),
+                scheduler,
+                instancesDataService,
+                settingsProvider
+        );
+
+        MaterialProgressDialogFragment.showOn(this, bulkFinalizationViewModel.isFinalizing(), getSupportFragmentManager(), () -> {
+            MaterialProgressDialogFragment dialog = new MaterialProgressDialogFragment();
+            dialog.setMessage("Finalizing drafts...");
+            return dialog;
         });
+
+        if (bulkFinalizationViewModel.isEnabled() && editMode) {
+            DraftsMenuProvider draftsMenuProvider = new DraftsMenuProvider(this, bulkFinalizationViewModel::finalizeAllDrafts);
+            addMenuProvider(draftsMenuProvider, this);
+            bulkFinalizationViewModel.getDraftsCount().observe(this, draftsCount -> {
+                draftsMenuProvider.setDraftsCount(draftsCount);
+                invalidateMenu();
+            });
+
+            bulkFinalizationViewModel.getFinalizedForms().observe(
+                    this,
+                    new FinalizeAllSnackbarPresenter(this.findViewById(android.R.id.content), this)
+            );
+        }
     }
 
     private void init() {
         setupAdapter();
-        instanceSyncTask = new InstanceSyncTask();
-        instanceSyncTask.setDiskSyncListener(this);
-        instanceSyncTask.execute();
         getSupportLoaderManager().initLoader(LOADER_ID, null, this);
     }
 
@@ -122,89 +180,51 @@ public class InstanceChooserList extends InstanceListActivity implements
      * Stores the path of selected instance in the parent class and finishes.
      */
     @Override
-    public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-        if (Collect.allowClick(getClass().getName())) {
-            Cursor c = (Cursor) listView.getAdapter().getItem(position);
-            startManagingCursor(c);
-            Uri instanceUri =
-                    ContentUris.withAppendedId(InstanceColumns.CONTENT_URI,
-                            c.getLong(c.getColumnIndex(InstanceColumns._ID)));
+    public void onItemClick(View view, int position) {
+        if (MultiClickGuard.allowClick(getClass().getName())) {
+            if (view.isEnabled()) {
+                Cursor c = (Cursor) listView.getAdapter().getItem(position);
+                long instanceId = c.getLong(c.getColumnIndex(DatabaseInstanceColumns._ID));
+                Uri instanceUri = InstancesContract.getUri(projectsDataService.requireCurrentProject().getUuid(), instanceId);
 
-            if (view.findViewById(R.id.visible_off).getVisibility() != View.VISIBLE) {
                 String action = getIntent().getAction();
                 if (Intent.ACTION_PICK.equals(action)) {
                     // caller is waiting on a picked form
                     setResult(RESULT_OK, new Intent().setData(instanceUri));
+                    finish();
                 } else {
-                    // the form can be edited if it is incomplete or if, when it was
-                    // marked as complete, it was determined that it could be edited
-                    // later.
-                    String status = c.getString(c.getColumnIndex(InstanceColumns.STATUS));
-                    String strCanEditWhenComplete =
-                            c.getString(c.getColumnIndex(InstanceColumns.CAN_EDIT_WHEN_COMPLETE));
-
-                    boolean canEdit = status.equals(InstanceProviderAPI.STATUS_INCOMPLETE)
-                            || Boolean.parseBoolean(strCanEditWhenComplete);
-                    if (!canEdit) {
-                        createErrorDialog(getString(R.string.cannot_edit_completed_form),
-                                DO_NOT_EXIT);
-                        return;
-                    }
-                    // caller wants to view/edit a form, so launch formentryactivity
+                    // caller wants to view/edit a form, so launch FormFillingActivity
                     Intent parentIntent = this.getIntent();
-                    Intent intent = new Intent(Intent.ACTION_EDIT, instanceUri);
-                    String formMode = parentIntent.getStringExtra(ApplicationConstants.BundleKeys.FORM_MODE);
-                    if (formMode == null || ApplicationConstants.FormModes.EDIT_SAVED.equalsIgnoreCase(formMode)) {
-                        intent.putExtra(ApplicationConstants.BundleKeys.FORM_MODE, ApplicationConstants.FormModes.EDIT_SAVED);
+                    Intent intent = new Intent(this, FormUriActivity.class);
+                    intent.setAction(Intent.ACTION_EDIT);
+                    intent.setData(instanceUri);
+                    String formMode = parentIntent.getStringExtra(FormOpeningMode.FORM_MODE_KEY);
+                    if (formMode == null || FormOpeningMode.EDIT_SAVED.equalsIgnoreCase(formMode)) {
+                        intent.putExtra(FormOpeningMode.FORM_MODE_KEY, FormOpeningMode.EDIT_SAVED);
+                        formLauncher.launch(intent);
                     } else {
-                        intent.putExtra(ApplicationConstants.BundleKeys.FORM_MODE, ApplicationConstants.FormModes.VIEW_SENT);
+                        intent.putExtra(FormOpeningMode.FORM_MODE_KEY, FormOpeningMode.VIEW_SENT);
+                        startActivity(intent);
+                        finish();
                     }
-                    startActivity(intent);
                 }
-                finish();
+            } else {
+                TextView disabledCause = view.findViewById(R.id.form_subtitle2);
+                Toast.makeText(this, disabledCause.getText(), Toast.LENGTH_SHORT).show();
             }
         }
-    }
-
-    @Override
-    protected void onResume() {
-        if (instanceSyncTask != null) {
-            instanceSyncTask.setDiskSyncListener(this);
-            if (instanceSyncTask.getStatus() == AsyncTask.Status.FINISHED) {
-                syncComplete(instanceSyncTask.getStatusMessage());
-            }
-        }
-        super.onResume();
-    }
-
-    @Override
-    protected void onPause() {
-        if (instanceSyncTask != null) {
-            instanceSyncTask.setDiskSyncListener(null);
-        }
-        super.onPause();
-    }
-
-    @Override
-    public void syncComplete(@NonNull String result) {
-        Timber.i("Disk scan complete");
-        hideProgressBarAndAllow();
-        showSnackbar(result);
     }
 
     private void setupAdapter() {
-        String[] data = new String[]{
-                InstanceColumns.DISPLAY_NAME, InstanceColumns.DISPLAY_SUBTEXT, InstanceColumns.DELETED_DATE
-        };
-        int[] view = new int[]{
-                R.id.text1, R.id.text2, R.id.text4
-        };
+        String[] data = {DatabaseInstanceColumns.DISPLAY_NAME, DatabaseInstanceColumns.DELETED_DATE};
+        int[] view = {R.id.form_title, R.id.form_subtitle2};
 
-        if (editMode) {
-            listAdapter = new SimpleCursorAdapter(this, R.layout.two_item, null, data, view);
-        } else {
-            listAdapter = new ViewSentListAdapter(this, R.layout.two_item, null, data, view);
-        }
+        boolean shouldCheckDisabled = !editMode;
+
+        InstanceListCursorAdapter instanceListCursorAdapter = new InstanceListCursorAdapter(
+                this, R.layout.form_chooser_list_item, null, data, view, shouldCheckDisabled);
+        instanceListCursorAdapter.setOnItemClickListener(this);
+        listAdapter = instanceListCursorAdapter;
         listView.setAdapter(listAdapter);
     }
 
@@ -223,15 +243,15 @@ public class InstanceChooserList extends InstanceListActivity implements
     public Loader<Cursor> onCreateLoader(int id, Bundle args) {
         showProgressBar();
         if (editMode) {
-            return new InstancesDao().getUnsentInstancesCursorLoader(getFilterText(), getSortingOrder());
+            return new CursorLoaderFactory(projectsDataService).createEditableInstancesCursorLoader(getFilterText(), getSortingOrder());
         } else {
-            return new InstancesDao().getSentInstancesCursorLoader(getFilterText(), getSortingOrder());
+            return new CursorLoaderFactory(projectsDataService).createSentInstancesCursorLoader(getFilterText(), getSortingOrder());
         }
     }
 
     @Override
     public void onLoadFinished(@NonNull Loader<Cursor> loader, Cursor cursor) {
-        hideProgressBarIfAllowed();
+        hideProgressBarAndAllow();
         listAdapter.swapCursor(cursor);
     }
 
@@ -240,24 +260,22 @@ public class InstanceChooserList extends InstanceListActivity implements
         listAdapter.swapCursor(null);
     }
 
-    private void createErrorDialog(String errorMsg, final boolean shouldExit) {
-        AlertDialog alertDialog = new AlertDialog.Builder(this).create();
-        alertDialog.setIcon(android.R.drawable.ic_dialog_info);
-        alertDialog.setMessage(errorMsg);
-        DialogInterface.OnClickListener errorListener = new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int i) {
-                switch (i) {
-                    case DialogInterface.BUTTON_POSITIVE:
-                        if (shouldExit) {
-                            finish();
-                        }
-                        break;
-                }
-            }
-        };
-        alertDialog.setCancelable(false);
-        alertDialog.setButton(getString(R.string.ok), errorListener);
-        alertDialog.show();
+    protected String getSortingOrder() {
+        String sortingOrder = DatabaseInstanceColumns.DISPLAY_NAME + " COLLATE NOCASE ASC, " + DatabaseInstanceColumns.STATUS + " DESC";
+        switch (getSelectedSortingOrder()) {
+            case BY_NAME_ASC:
+                sortingOrder = DatabaseInstanceColumns.DISPLAY_NAME + " COLLATE NOCASE ASC, " + DatabaseInstanceColumns.STATUS + " DESC";
+                break;
+            case BY_NAME_DESC:
+                sortingOrder = DatabaseInstanceColumns.DISPLAY_NAME + " COLLATE NOCASE DESC, " + DatabaseInstanceColumns.STATUS + " DESC";
+                break;
+            case BY_DATE_ASC:
+                sortingOrder = DatabaseInstanceColumns.LAST_STATUS_CHANGE_DATE + " ASC";
+                break;
+            case BY_DATE_DESC:
+                sortingOrder = DatabaseInstanceColumns.LAST_STATUS_CHANGE_DATE + " DESC";
+                break;
+        }
+        return sortingOrder;
     }
 }

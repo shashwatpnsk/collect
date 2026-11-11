@@ -1,0 +1,54 @@
+plugins {
+    alias(libs.plugins.androidLibrary)
+    alias(libs.plugins.kotlinKsp)
+}
+
+apply(from = "../config/quality.gradle")
+
+android {
+    compileSdk = libs.versions.compileSdk.get().toInt()
+
+    defaultConfig {
+        minSdk = libs.versions.minSdk.get().toInt()
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    compileOptions {
+        isCoreLibraryDesugaringEnabled = true
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    namespace = "org.odk.collect.maplibre"
+}
+
+dependencies {
+    coreLibraryDesugaring(libs.desugar)
+
+    implementation(project(":androidshared"))
+    implementation(project(":maps"))
+    implementation(project(":settings"))
+    implementation(project(":shared"))
+    implementation(project(":strings"))
+    implementation(libs.androidxFragmentKtx)
+    implementation(libs.androidxPreferenceKtx)
+    implementation(libs.kotlinxCoroutinesAndroid)
+    implementation(libs.okHttp)
+    implementation(libs.timber)
+    implementation(libs.dagger)
+    ksp(libs.daggerCompiler)
+    implementation(libs.maplibreAndroidSdk)
+    implementation(libs.maplibreAnnotationPlugin) {
+        exclude(group = "org.maplibre.gl", module = "android-sdk")
+    }
+    implementation(libs.maplibreScalebarPlugin) {
+        exclude(group = "org.maplibre.gl", module = "android-sdk")
+    }
+
+    testImplementation(project(":test-shared"))
+    testImplementation(libs.junit)
+    testImplementation(libs.hamcrest)
+    testImplementation(libs.mockitoKotlin)
+    testImplementation(libs.okhttp3Mockwebserver)
+}

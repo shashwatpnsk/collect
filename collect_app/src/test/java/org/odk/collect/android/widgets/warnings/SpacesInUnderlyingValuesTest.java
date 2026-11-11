@@ -5,14 +5,16 @@ import com.google.common.collect.Lists;
 import org.javarosa.core.model.SelectChoice;
 import org.junit.Before;
 import org.junit.Test;
+import org.odk.collect.android.widgets.warnings.SpacesInUnderlyingValuesWarning.SpacesInUnderlyingValues;
 import org.odk.collect.android.widgets.warnings.SpacesInUnderlyingValuesWarning.UnderlyingValuesChecker;
 
 import java.util.List;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.odk.collect.android.widgets.warnings.SpacesInUnderlyingValuesWarning.SpacesInUnderlyingValues;
 
 public class SpacesInUnderlyingValuesTest {
 
@@ -74,22 +76,24 @@ public class SpacesInUnderlyingValuesTest {
     }
 
     @Test
-    public void detectsSpaceInTheBeginningOfUnderlyingValue() {
+    public void spaceInTheBeginningOfUnderlyingValueIsTrimmed() {
         List<SelectChoice> items = Lists.newArrayList(
                 new SelectChoice("label", " before")
         );
 
         subject.check(items);
-        assertTrue(subject.hasInvalidValues());
+        assertThat(items.get(0).getValue(), equalTo("before"));
+        assertFalse(subject.hasInvalidValues());
     }
 
     @Test
-    public void detectsSpaceInTheEndOfUnderlyingValue() {
+    public void spaceInTheTheEndOfUnderlyingValueIsTrimmed() {
         List<SelectChoice> items = Lists.newArrayList(
                 new SelectChoice("label", "after ")
         );
 
         subject.check(items);
-        assertTrue(subject.hasInvalidValues());
+        assertThat(items.get(0).getValue(), equalTo("after"));
+        assertFalse(subject.hasInvalidValues());
     }
 }

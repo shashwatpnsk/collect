@@ -14,116 +14,80 @@
 
 package org.odk.collect.android.utilities;
 
-import android.annotation.TargetApi;
+import static org.odk.collect.androidshared.system.ContextExt.getThemeAttributeValue;
+import static org.odk.collect.androidshared.system.ContextExt.isDarkTheme;
+
 import android.content.Context;
-import android.os.Build;
-import android.support.annotation.AttrRes;
-import android.support.annotation.ColorInt;
-import android.support.annotation.DrawableRes;
-import android.support.annotation.StyleRes;
-import android.util.TypedValue;
+
+import androidx.annotation.ColorInt;
+import androidx.annotation.DrawableRes;
+import androidx.annotation.StyleRes;
 
 import org.odk.collect.android.R;
-import org.odk.collect.android.preferences.GeneralSharedPreferences;
-import org.odk.collect.android.preferences.PreferenceKeys;
+import org.odk.collect.android.injection.DaggerUtils;
+import org.odk.collect.settings.SettingsProvider;
 
+import javax.inject.Inject;
+
+/**
+ * @deprecated Use
+ * {@link org.odk.collect.androidshared.system.ContextExt#getThemeAttributeValue(Context, int)}
+ * instead.
+ */
+@Deprecated
 public final class ThemeUtils {
+
+    @Inject
+    SettingsProvider settingsProvider;
 
     private final Context context;
 
     public ThemeUtils(Context context) {
+        DaggerUtils.getComponent(context).inject(this);
         this.context = context;
-    }
-
-    @StyleRes
-    public int getAppTheme() {
-        return isDarkTheme() ? R.style.DarkAppTheme : R.style.LightAppTheme;
-    }
-
-    @StyleRes
-    public int getFormEntryActivityTheme() {
-        return isDarkTheme() ? R.style.FormEntryActivityDarkTheme : R.style.FormEntryActivityLightTheme;
-    }
-
-    @StyleRes
-    public int getSettingsTheme() {
-        return isDarkTheme() ? R.style.AppTheme_SettingsTheme_Dark : R.style.AppTheme_SettingsTheme_Light;
-    }
-
-    @StyleRes
-    public int getBottomDialogTheme() {
-        return isDarkTheme() ? R.style.DarkMaterialDialogSheet : R.style.LightMaterialDialogSheet;
     }
 
     @DrawableRes
     public int getDivider() {
-        return isDarkTheme() ? android.R.drawable.divider_horizontal_dark : android.R.drawable.divider_horizontal_bright;
+        return isDarkTheme(context) ? android.R.drawable.divider_horizontal_dark : android.R.drawable.divider_horizontal_bright;
     }
 
-    public boolean isHoloDialogTheme(int theme) {
-        return theme == android.R.style.Theme_Holo_Light_Dialog ||
-                theme == android.R.style.Theme_Holo_Dialog;
-    }
-
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    @StyleRes
-    public int getMaterialDialogTheme() {
-        return isDarkTheme() ?
-                android.R.style.Theme_Material_Dialog :
-                android.R.style.Theme_Material_Light_Dialog;
+    public boolean isSpinnerDatePickerDialogTheme(int theme) {
+        return theme == R.style.Theme_Collect_Dark_Spinner_DatePicker_Dialog ||
+                theme == R.style.Theme_Collect_Light_Spinner_DatePicker_Dialog;
     }
 
     @StyleRes
-    public int getHoloDialogTheme() {
-        return isDarkTheme() ?
-                android.R.style.Theme_Holo_Dialog :
-                android.R.style.Theme_Holo_Light_Dialog;
+    public int getCalendarDatePickerDialogTheme() {
+        return isDarkTheme(context)
+                ? R.style.Theme_Collect_Dark_Calendar_DatePicker_Dialog
+                : R.style.Theme_Collect_Light_Calendar_DatePicker_Dialog;
     }
 
-    private int getAttributeValue(@AttrRes int resId) {
-        TypedValue outValue = new TypedValue();
-        context.getTheme().resolveAttribute(resId, outValue, true);
-        return outValue.data;
+    @StyleRes
+    public int getSpinnerDatePickerDialogTheme() {
+        return isDarkTheme(context) ?
+                R.style.Theme_Collect_Dark_Spinner_DatePicker_Dialog :
+                R.style.Theme_Collect_Light_Spinner_DatePicker_Dialog;
     }
 
-    public int getAccountPickerTheme() {
-        return isDarkTheme() ? 0 : 1;
-    }
-
-    public boolean isDarkTheme() {
-        String theme = (String) GeneralSharedPreferences.getInstance().get(PreferenceKeys.KEY_APP_THEME);
-        return theme.equals(context.getString(R.string.app_theme_dark));
+    @StyleRes
+    public int getSpinnerTimePickerDialogTheme() {
+        return isDarkTheme(context) ?
+                R.style.Theme_Collect_Dark_Spinner_TimePicker_Dialog :
+                R.style.Theme_Collect_Light_Spinner_TimePicker_Dialog;
     }
 
     /**
      * @return Text color for the current {@link android.content.res.Resources.Theme}
      */
     @ColorInt
-    public int getPrimaryTextColor() {
-        return getAttributeValue(R.attr.primaryTextColor);
+    public int getColorOnSurface() {
+        return getThemeAttributeValue(context, com.google.android.material.R.attr.colorOnSurface);
     }
 
-    /**
-     * @return Accent color for the current {@link android.content.res.Resources.Theme}
-     */
     @ColorInt
-    public int getAccentColor() {
-        return getAttributeValue(R.attr.colorAccent);
-    }
-
-    /**
-     * @return Icon color for the current {@link android.content.res.Resources.Theme}
-     */
-    @ColorInt
-    public int getIconColor() {
-        return getAttributeValue(R.attr.iconColor);
-    }
-
-    /**
-     * @return Rank item color for the current {@link android.content.res.Resources.Theme}
-     */
-    @ColorInt
-    public int getRankItemColor() {
-        return getAttributeValue(R.attr.rankItemColor);
+    public int getColorPrimary() {
+        return getThemeAttributeValue(context, androidx.appcompat.R.attr.colorPrimary);
     }
 }

@@ -1,0 +1,58 @@
+package org.odk.collect.android.analytics
+
+import org.odk.collect.analytics.Analytics
+import org.odk.collect.android.javarosawrapper.FormController
+import org.odk.collect.forms.Form
+import org.odk.collect.settings.keys.ProjectKeys
+import org.odk.collect.shared.settings.Settings
+import org.odk.collect.shared.strings.Md5.getMd5Hash
+import java.io.ByteArrayInputStream
+
+/**
+ * This class should be used to log some specific events that require additional operations, like
+ * determining form hash.
+ * If you want to log a generic event use [org.odk.collect.analytics.Analytics] directly.
+ */
+object AnalyticsUtils {
+    @JvmStatic
+    fun setForm(formController: FormController) {
+        Analytics.setParam("form", getFormHash(formController))
+    }
+
+    @JvmStatic
+    fun logFormEvent(event: String, formId: String?, formTitle: String?) {
+        Analytics.log(event, "form", getFormHash(formId, formTitle))
+    }
+
+    @JvmStatic
+    fun logFormEvent(event: String, form: Form) {
+        Analytics.log(event, "form", getFormHash(form))
+    }
+
+    @JvmStatic
+    fun logServerEvent(event: String, generalSettings: Settings) {
+        Analytics.log(event, "server", getServerHash(generalSettings)!!)
+    }
+
+    fun getFormHash(form: Form): String {
+        return getFormHash(form.formId, form.displayName)
+    }
+
+    private fun getFormHash(formController: FormController?): String {
+        return if (formController != null) {
+            val formID = formController.getFormDef()?.mainInstance?.root?.getAttributeValue("", "id") ?: ""
+            getFormHash(formID, formController.getFormTitle())
+        } else {
+            ""
+        }
+    }
+
+    private fun getFormHash(formId: String?, formTitle: String?): String {
+        return getMd5Hash(ByteArrayInputStream("$formTitle $formId".toByteArray())) ?: ""
+    }
+
+    private fun getServerHash(generalSettings: Settings): String? {
+        val currentServerUrl = generalSettings.getString(ProjectKeys.KEY_SERVER_URL)
+        return getMd5Hash(ByteArrayInputStream(currentServerUrl?.toByteArray()))
+    }
+}

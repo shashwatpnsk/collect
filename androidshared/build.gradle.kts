@@ -1,0 +1,74 @@
+plugins {
+    alias(libs.plugins.androidLibrary)
+    alias(libs.plugins.composeCompiler)
+}
+
+apply(from = "../config/quality.gradle")
+
+android {
+    compileSdk = libs.versions.compileSdk.get().toInt()
+
+    buildFeatures {
+        viewBinding = true
+        compose = true
+    }
+
+    defaultConfig {
+        minSdk = libs.versions.minSdk.get().toInt()
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
+    }
+
+    compileOptions {
+        isCoreLibraryDesugaringEnabled = true
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+    namespace = "org.odk.collect.androidshared"
+}
+
+dependencies {
+    coreLibraryDesugaring(libs.desugar)
+
+    implementation(project(":icons"))
+    implementation(project(":strings"))
+    implementation(project(":shared"))
+    implementation(project(":async"))
+    implementation(libs.androidxCoreKtx)
+    implementation(libs.androidxLifecycleLivedataKtx)
+    implementation(libs.androidMaterial)
+    implementation(libs.androidxFragmentKtx)
+    implementation(libs.androidxPreferenceKtx)
+    implementation(libs.timber)
+    implementation(libs.androidxExinterface)
+    implementation(libs.playServicesLocation)
+
+    val composeBom = platform(libs.androidxComposeBom)
+    implementation(composeBom)
+    implementation(libs.androidXComposeMaterial)
+
+    testImplementation(project(":test-shared"))
+    testImplementation(project(":androidtest"))
+    testImplementation(libs.junit)
+    testImplementation(libs.androidxTestExtJunit)
+    testImplementation(libs.androidxTestEspressoCore)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.mockitoKotlin)
+    testImplementation(libs.androidxArchCoreTesting)
+    testImplementation(libs.kotlinxCoroutinesTest)
+
+    androidTestImplementation(libs.androidxTestExtJunit)
+    androidTestImplementation(libs.junit)
+
+    debugImplementation(project(":fragments-test"))
+}

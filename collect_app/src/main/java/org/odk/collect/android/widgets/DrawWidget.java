@@ -15,13 +15,16 @@
 package org.odk.collect.android.widgets;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.view.View;
-import android.widget.Button;
 import org.javarosa.form.api.FormEntryPrompt;
-import org.odk.collect.android.R;
-import org.odk.collect.android.activities.DrawActivity;
+import org.odk.collect.android.databinding.DrawWidgetBinding;
+import org.odk.collect.draw.DrawActivity;
+import org.odk.collect.android.formentry.questions.QuestionDetails;
+import org.odk.collect.android.utilities.QuestionMediaManager;
+import org.odk.collect.android.widgets.utilities.WaitingForDataRegistry;
 
 import static org.odk.collect.android.utilities.ApplicationConstants.RequestCodes;
 
@@ -32,26 +35,30 @@ import static org.odk.collect.android.utilities.ApplicationConstants.RequestCode
  */
 @SuppressLint("ViewConstructor")
 public class DrawWidget extends BaseImageWidget {
+    DrawWidgetBinding binding;
 
-    private Button drawButton;
+    public DrawWidget(Context context, QuestionDetails prompt, QuestionMediaManager questionMediaManager, WaitingForDataRegistry waitingForDataRegistry, String tmpImageFilePath, Dependencies dependencies) {
+        super(context, prompt, questionMediaManager, waitingForDataRegistry, tmpImageFilePath, dependencies);
+        imageClickHandler = new DrawImageClickHandler(DrawActivity.OPTION_DRAW, RequestCodes.DRAW_IMAGE, org.odk.collect.strings.R.string.draw_image);
 
-    public DrawWidget(Context context, FormEntryPrompt prompt) {
-        super(context, prompt);
-        imageClickHandler = new DrawImageClickHandler(DrawActivity.OPTION_DRAW, RequestCodes.DRAW_IMAGE, R.string.draw_image);
-        setUpLayout();
-        setUpBinary();
-        addAnswerView(answerLayout);
+        render();
+        updateAnswer();
     }
 
     @Override
-    protected void setUpLayout() {
-        super.setUpLayout();
-        drawButton = getSimpleButton(getContext().getString(R.string.draw_image));
+    protected View onCreateWidgetView(Context context, FormEntryPrompt prompt, int answerFontSize) {
+        binding = DrawWidgetBinding.inflate(((Activity) context).getLayoutInflater());
+        binding.drawButton.setOnClickListener(v -> imageClickHandler.clickImage("drawButton"));
+        binding.image.setOnClickListener(v -> imageClickHandler.clickImage("viewImage"));
 
-        answerLayout.addView(drawButton);
-        answerLayout.addView(errorTextView);
+        if (questionDetails.isReadOnly()) {
+            binding.drawButton.setVisibility(View.GONE);
+        }
 
-        errorTextView.setVisibility(View.GONE);
+        errorTextView = binding.errorMessage;
+        imageView = binding.image;
+
+        return binding.getRoot();
     }
 
     @Override
@@ -62,24 +69,18 @@ public class DrawWidget extends BaseImageWidget {
     @Override
     public void clearAnswer() {
         super.clearAnswer();
-        // reset buttons
-        drawButton.setText(getContext().getString(R.string.draw_image));
+        binding.drawButton.setText(getContext().getString(org.odk.collect.strings.R.string.draw_image));
     }
 
     @Override
     public void setOnLongClickListener(OnLongClickListener l) {
-        drawButton.setOnLongClickListener(l);
+        binding.drawButton.setOnLongClickListener(l);
         super.setOnLongClickListener(l);
     }
 
     @Override
     public void cancelLongPress() {
         super.cancelLongPress();
-        drawButton.cancelLongPress();
-    }
-
-    @Override
-    public void onButtonClick(int buttonId) {
-        imageClickHandler.clickImage("drawButton");
+        binding.drawButton.cancelLongPress();
     }
 }

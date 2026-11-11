@@ -16,14 +16,13 @@
 
 package org.odk.collect.android.fragments.dialogs;
 
-import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.os.Bundle;
-import android.support.v4.app.DialogFragment;
+import androidx.fragment.app.DialogFragment;
 
-import org.odk.collect.android.R;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public class ResetSettingsResultDialog extends DialogFragment {
     public static final String RESET_SETTINGS_RESULT_DIALOG_TAG = "resetSettingsResultDialogTag";
@@ -59,11 +58,10 @@ public class ResetSettingsResultDialog extends DialogFragment {
 
         String message = getArguments() != null ? getArguments().getString(MESSAGE) : "";
 
-        return new AlertDialog.Builder(getActivity())
-                .setTitle(R.string.reset_app_state_result)
-                .setIcon(android.R.drawable.ic_dialog_info)
+        return new MaterialAlertDialogBuilder(getActivity())
+                .setTitle(org.odk.collect.strings.R.string.reset_app_state_result)
                 .setMessage(message)
-                .setPositiveButton(R.string.ok, new DialogInterface.OnClickListener() {
+                .setPositiveButton(org.odk.collect.strings.R.string.ok, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int id) {
                         listener.onDialogClosed();

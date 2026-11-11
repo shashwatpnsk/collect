@@ -14,14 +14,18 @@
 
 package org.odk.collect.android.tasks;
 
+import static org.odk.collect.strings.localization.LocalizedApplicationKt.getLocalizedString;
+
 import android.os.AsyncTask;
 
+import org.odk.collect.android.application.Collect;
+import org.odk.collect.android.formmanagement.FormsDataService;
+import org.odk.collect.android.formmanagement.ServerFormDetails;
+import org.odk.collect.android.formmanagement.download.FormDownloadException;
 import org.odk.collect.android.listeners.DownloadFormsTaskListener;
-import org.odk.collect.android.listeners.FormDownloaderListener;
-import org.odk.collect.android.logic.FormDetails;
-import org.odk.collect.android.utilities.FormDownloader;
+
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Background task for downloading a given list of forms. We assume right now that the forms are
@@ -30,31 +34,38 @@ import java.util.HashMap;
  *
  * @author msundt
  * @author carlhartung
+ *
+ * @deprecated Server form should be downloaded using {@link FormsDataService}
  */
 public class DownloadFormsTask extends
-        AsyncTask<ArrayList<FormDetails>, String, HashMap<FormDetails, String>> implements FormDownloaderListener {
+        AsyncTask<ArrayList<ServerFormDetails>, String, Map<ServerFormDetails, FormDownloadException>> {
 
+    private final String projectId;
+    private final FormsDataService formsDataService;
     private DownloadFormsTaskListener stateListener;
 
-    @Override
-    public void progressUpdate(String currentFile, String progress, String total) {
-        publishProgress(currentFile, progress, total);
+    public DownloadFormsTask(String projectId, FormsDataService formsDataService) {
+        this.projectId = projectId;
+        this.formsDataService = formsDataService;
     }
 
     @Override
-    public boolean isTaskCanceled() {
-        return isCancelled();
+    protected Map<ServerFormDetails, FormDownloadException> doInBackground(ArrayList<ServerFormDetails>... values) {
+        return formsDataService.downloadForms(projectId, values[0], (index, count) -> {
+            ServerFormDetails serverFormDetails = values[0].get(index);
+            String message = getLocalizedString(Collect.getInstance(), org.odk.collect.strings.R.string.form_download_progress,
+                    serverFormDetails.getFormName(),
+                    String.valueOf(count),
+                    String.valueOf(serverFormDetails.getManifest().getMediaFiles().size())
+            );
+
+            publishProgress(message, String.valueOf(index), String.valueOf(values[0].size()));
+            return null;
+        }, this::isCancelled);
     }
 
     @Override
-    protected HashMap<FormDetails, String> doInBackground(ArrayList<FormDetails>... values) {
-        FormDownloader formDownloader = new FormDownloader();
-        formDownloader.setDownloaderListener(this);
-        return formDownloader.downloadForms(values[0]);
-    }
-
-    @Override
-    protected void onCancelled(HashMap<FormDetails, String> formDetailsStringHashMap) {
+    protected void onCancelled(Map<ServerFormDetails, FormDownloadException> formDetailsStringHashMap) {
         synchronized (this) {
             if (stateListener != null) {
                 stateListener.formsDownloadingCancelled();
@@ -63,7 +74,7 @@ public class DownloadFormsTask extends
     }
 
     @Override
-    protected void onPostExecute(HashMap<FormDetails, String> value) {
+    protected void onPostExecute(Map<ServerFormDetails, FormDownloadException> value) {
         synchronized (this) {
             if (stateListener != null) {
                 stateListener.formsDownloadingComplete(value);

@@ -1,0 +1,129 @@
+package org.odk.collect.android.support
+
+import android.os.Handler
+import android.os.Looper
+import androidx.fragment.app.Fragment
+import org.odk.collect.maps.MapFragment
+import org.odk.collect.maps.MapPoint
+import org.odk.collect.maps.circles.CircleDescription
+import org.odk.collect.maps.markers.MarkerDescription
+import org.odk.collect.maps.markers.MarkerIconDescription
+import org.odk.collect.maps.traces.LineDescription
+import org.odk.collect.maps.traces.PolygonDescription
+
+class FakeClickableMapFragment : Fragment(), MapFragment {
+
+    private var idCounter = 1
+    private val markers = mutableMapOf<Int, MarkerDescription>()
+    private var featureClickListener: MapFragment.FeatureListener? = null
+
+    override fun init(
+        readyListener: MapFragment.ReadyListener?,
+        errorListener: MapFragment.ErrorListener?
+    ) {
+        readyListener?.onReady(this)
+    }
+
+    override fun getCenter(): MapPoint {
+        return MapPoint(0.0, 0.0)
+    }
+
+    override fun getZoom(): Double {
+        return 1.0
+    }
+
+    override fun setCenter(center: MapPoint?, animate: Boolean) {}
+    override fun zoomToCurrentLocation(center: MapPoint?) {}
+
+    override fun zoomToPoint(center: MapPoint?, animate: Boolean) {}
+
+    override fun zoomToPoint(center: MapPoint?, zoom: Double, animate: Boolean) {}
+
+    override fun zoomToBoundingBox(
+        points: Iterable<MapPoint>,
+        scaleFactor: Double,
+        animate: Boolean
+    ) {}
+
+    override fun updateMarker(
+        featureId: Int,
+        markerDescription: MarkerDescription
+    ) {
+    }
+
+    override fun addMarkers(markers: List<MarkerDescription>): List<Int> {
+        return markers.map { marker ->
+            idCounter++.also { id -> this.markers[id] = marker }
+        }
+    }
+
+    override fun setMarkerIcon(featureId: Int, markerIconDescription: MarkerIconDescription) {}
+
+    override fun getMarkerPoint(featureId: Int): MapPoint {
+        return MapPoint(0.0, 0.0)
+    }
+
+    override fun addPolyLine(lineDescription: LineDescription): Int {
+        return -1
+    }
+
+    override fun updatePolyLine(featureId: Int, lineDescription: LineDescription) {}
+
+    override fun addPolygon(polygonDescription: PolygonDescription): Int {
+        return -1
+    }
+
+    override fun updatePolygon(featureId: Int, polygonDescription: PolygonDescription) {}
+    override fun addCircle(circleDescription: CircleDescription): Int {
+        return -1
+    }
+
+    override fun updateCircle(
+        featureId: Int,
+        circleDescription: CircleDescription
+    ) {
+    }
+
+    override fun getPolyPoints(featureId: Int): MutableList<MapPoint> {
+        return mutableListOf()
+    }
+
+    override fun clearFeatures() {
+        markers.clear()
+    }
+
+    override fun clearFeatures(ids: List<Int>) {
+        markers.keys.removeAll(ids.toSet())
+    }
+
+    override fun setClickListener(listener: MapFragment.PointListener?) {}
+
+    override fun setLongPressListener(listener: MapFragment.PointListener?) {}
+
+    override fun setFeatureClickListener(listener: MapFragment.FeatureListener?) {
+        featureClickListener = listener
+    }
+
+    override fun setDragEndListener(listener: MapFragment.FeatureListener?) {}
+
+    override fun hasCenter(): Boolean {
+        return false
+    }
+
+    fun clickOnFeatureAt(latitude: Double, longitude: Double) {
+        val featureId = markers.entries.single {
+            it.value.point.latitude == latitude && it.value.point.longitude == longitude
+        }.key
+
+        var done = false
+
+        Handler(Looper.getMainLooper()).post {
+            featureClickListener!!.onFeature(featureId)
+            done = true
+        }
+
+        while (!done) {
+            Thread.sleep(1)
+        }
+    }
+}

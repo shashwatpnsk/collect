@@ -1,0 +1,119 @@
+package org.odk.collect.maplibre
+
+import org.odk.collect.settings.keys.ProjectKeys
+import org.odk.collect.settings.keys.ProjectKeys.KEY_MAPBOX_MAP_STYLE
+import org.odk.collect.shared.injection.Keys
+import org.odk.collect.strings.R
+
+object Configurations {
+    val mapLibre = mapOf(
+        ProjectKeys.BASEMAP_SOURCE_MAPBOX to Configuration(
+            name = R.string.basemap_source_mapbox,
+            styleSetting = KEY_MAPBOX_MAP_STYLE,
+            styleOptions = mapOf(
+                "mapbox://styles/mapbox/streets-v11" to StyleOption(
+                    name = R.string.streets,
+                    BasemapUri.Mapbox("mapbox://styles/mapbox/streets-v11")
+                ),
+                "mapbox://styles/mapbox/light-v10" to StyleOption(
+                    name = R.string.light,
+                    BasemapUri.Mapbox("mapbox://styles/mapbox/light-v10")
+                ),
+                "mapbox://styles/mapbox/dark-v10" to StyleOption(
+                    name = R.string.dark,
+                    BasemapUri.Mapbox("mapbox://styles/mapbox/dark-v10")
+                ),
+                "mapbox://styles/mapbox/satellite-v9" to StyleOption(
+                    name = R.string.satellite,
+                    BasemapUri.Mapbox("mapbox://styles/mapbox/satellite-v9")
+                ),
+                "mapbox://styles/mapbox/satellite-streets-v11" to StyleOption(
+                    name = R.string.hybrid,
+                    BasemapUri.Mapbox("mapbox://styles/mapbox/satellite-streets-v11")
+                ),
+                "mapbox://styles/mapbox/outdoors-v11" to StyleOption(
+                    name = R.string.outdoors,
+                    BasemapUri.Mapbox("mapbox://styles/mapbox/outdoors-v11")
+                )
+            )
+        ),
+        ProjectKeys.BASEMAP_SOURCE_OSM to Configuration(
+            name = R.string.basemap_source_osm,
+            attribution = "<a href=\"https://www.openstreetmap.org/copyright\">© OpenStreetMap contributors</a>",
+            uri = BasemapUri.Raster("https://tile.openstreetmap.org/{z}/{x}/{y}.png"),
+            maxZoom = 19f
+        ),
+        ProjectKeys.BASEMAP_SOURCE_USGS to Configuration(
+            name = R.string.basemap_source_usgs,
+            attribution = "<a href=\"https://www.usgs.gov/programs/national-geospatial-program\">Map services and data available from U.S. Geological Survey, National Geospatial Program.</a>",
+            styleSetting = ProjectKeys.KEY_USGS_MAP_STYLE,
+            styleOptions = mapOf(
+                "topographic" to StyleOption(
+                    name = R.string.topographic,
+                    BasemapUri.Raster("https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}")
+                ),
+                "hybrid" to StyleOption(
+                    name = R.string.hybrid,
+                    BasemapUri.Raster("https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/{z}/{y}/{x}")
+                ),
+                "satellite" to StyleOption(
+                    name = R.string.satellite,
+                    BasemapUri.Raster("https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}")
+                )
+            )
+        ),
+        ProjectKeys.BASEMAP_SOURCE_CARTO to Configuration(
+            name = R.string.basemap_source_carto,
+            attribution = "<a href=\"https://www.openstreetmap.org/copyright\">© OpenStreetMap contributors</a>, " +
+                "<a href=\"https://carto.com/attributions\">© CARTO</a>",
+            styleSetting = ProjectKeys.KEY_CARTO_MAP_STYLE,
+            styleOptions = mapOf(
+                "positron" to StyleOption(
+                    name = R.string.carto_map_style_positron,
+                    BasemapUri.Mapbox("carto") { key ->
+                        "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json?key=${key.orEmpty()}"
+                    }
+                ),
+                "dark_matter" to StyleOption(
+                    name = R.string.carto_map_style_dark_matter,
+                    BasemapUri.Mapbox("carto") { key ->
+                        "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json?key=${key.orEmpty()}"
+                    }
+                )
+            )
+        ),
+    )
+
+    val google = mapOf(
+        ProjectKeys.BASEMAP_SOURCE_GOOGLE to Configuration(
+            name = R.string.basemap_source_google,
+            styleSetting = ProjectKeys.KEY_GOOGLE_MAP_STYLE
+        ),
+    )
+
+    val all = mapLibre + google
+}
+
+class Configuration(
+    val name: Int,
+    val attribution: String? = null,
+    val uri: BasemapUri? = null,
+    val styleSetting: String? = null,
+    val styleOptions: Map<String, StyleOption> = emptyMap(),
+    val maxZoom: Float? = null
+)
+
+class StyleOption(val name: Int, val uri: BasemapUri)
+
+sealed class BasemapUri(private val keyName: String? = null, private val factory: (key: String?) -> String) {
+
+    fun value(keys: Keys): String {
+        return factory(keyName?.let { keys.get(it) })
+    }
+
+    class Raster(value: String) : BasemapUri(null, { value })
+
+    class Mapbox(keyName: String?, factory: (key: String?) -> String) : BasemapUri(keyName, factory) {
+        constructor(value: String) : this(null, { value })
+    }
+}

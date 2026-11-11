@@ -16,13 +16,13 @@
 
 package org.odk.collect.android.fragments.dialogs;
 
-import android.app.AlertDialog;
 import android.app.Dialog;
-import android.content.DialogInterface;
 import android.os.Bundle;
 
-import android.support.v4.app.DialogFragment;
-import android.support.v4.app.FragmentManager;
+import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.FragmentManager;
+
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import timber.log.Timber;
 
@@ -74,16 +74,13 @@ public class SimpleDialog extends DialogFragment {
     public Dialog onCreateDialog(Bundle savedInstanceState) {
         setCancelable(false);
 
-        return new AlertDialog.Builder(getActivity())
+        return new MaterialAlertDialogBuilder(getActivity())
                 .setTitle(getArguments().getString(DIALOG_TITLE))
                 .setIcon(getArguments().getInt(ICON_ID))
                 .setMessage(getArguments().getString(MESSAGE))
-                .setPositiveButton(getArguments().getString(BUTTON_TITLE), new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int id) {
-                        if (getArguments().getBoolean(FINISH_ACTIVITY)) {
-                            getActivity().finish();
-                        }
+                .setPositiveButton(getArguments().getString(BUTTON_TITLE), (dialog, id) -> {
+                    if (getArguments().getBoolean(FINISH_ACTIVITY)) {
+                        getActivity().finish();
                     }
                 })
                 .create();

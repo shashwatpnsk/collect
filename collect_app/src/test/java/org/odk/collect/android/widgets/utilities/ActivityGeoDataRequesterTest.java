@@ -1,0 +1,225 @@
+package org.odk.collect.android.widgets.utilities;
+
+import static junit.framework.TestCase.assertEquals;
+import static junit.framework.TestCase.assertTrue;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.equalTo;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.odk.collect.android.utilities.ApplicationConstants.RequestCodes.LOCATION_CAPTURE;
+import static org.odk.collect.android.widgets.support.QuestionWidgetHelpers.promptWithAnswer;
+import static org.odk.collect.geo.Constants.EXTRA_RETAIN_MOCK_ACCURACY;
+import static org.robolectric.Shadows.shadowOf;
+import static java.util.Arrays.asList;
+
+import android.content.ComponentName;
+import android.content.Intent;
+import android.os.Bundle;
+
+import androidx.fragment.app.FragmentActivity;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+
+import org.javarosa.core.model.FormIndex;
+import org.javarosa.core.model.QuestionDef;
+import org.javarosa.core.model.instance.TreeElement;
+import org.javarosa.form.api.FormEntryPrompt;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.odk.collect.android.fakes.FakePermissionsProvider;
+import org.odk.collect.android.widgets.geo.GeoPointMapDialogFragment;
+import org.odk.collect.android.widgets.geo.GeoPolyDialogFragment;
+import org.odk.collect.android.widgets.support.FakeWaitingForDataRegistry;
+import org.odk.collect.geo.geopoint.GeoPointActivity;
+import org.odk.collect.testshared.MockDialogFragment;
+import org.odk.collect.testshared.MockFragmentFactory;
+import org.robolectric.Robolectric;
+import org.robolectric.shadows.ShadowActivity;
+
+@RunWith(AndroidJUnit4.class)
+public class ActivityGeoDataRequesterTest {
+
+    private final FakePermissionsProvider permissionsProvider = new FakePermissionsProvider();
+    private final FakeWaitingForDataRegistry waitingForDataRegistry = new FakeWaitingForDataRegistry();
+
+    private FragmentActivity testActivity;
+    private ShadowActivity shadowActivity;
+    private FormEntryPrompt prompt;
+    private FormIndex formIndex;
+    private QuestionDef questionDef;
+
+    private ActivityGeoDataRequester activityGeoDataRequester;
+
+    @Before
+    public void setUp() {
+        testActivity = Robolectric.buildActivity(FragmentActivity.class).setup().get();
+        shadowActivity = shadowOf(testActivity);
+        testActivity.getSupportFragmentManager().setFragmentFactory(new MockFragmentFactory());
+
+        prompt = promptWithAnswer(null);
+        formIndex = mock(FormIndex.class);
+        questionDef = mock(QuestionDef.class);
+
+        permissionsProvider.setPermissionGranted(true);
+        when(prompt.getQuestion()).thenReturn(questionDef);
+        when(prompt.getIndex()).thenReturn(formIndex);
+
+        activityGeoDataRequester = new ActivityGeoDataRequester(permissionsProvider, testActivity);
+    }
+
+    @Test
+    public void whenPermissionIsNotGranted_requestGeoPoint_doesNotLaunchAnyIntent() {
+        permissionsProvider.setPermissionGranted(false);
+        activityGeoDataRequester.requestGeoPoint(prompt, waitingForDataRegistry);
+
+        assertNull(shadowActivity.getNextStartedActivity());
+        assertTrue(waitingForDataRegistry.waiting.isEmpty());
+    }
+
+    @Test
+    public void whenPermissionIsNotGranted_requestGeoTrace_doesNotOpenDialog() {
+        permissionsProvider.setPermissionGranted(false);
+        activityGeoDataRequester.requestGeoPoly(prompt);
+
+        assertThat(testActivity.getSupportFragmentManager().getFragments().size(), equalTo(0));
+    }
+
+    @Test
+    public void whenPermissionIGranted_requestGeoPoint_setsFormIndexWaitingForData() {
+        activityGeoDataRequester.requestGeoPoint(prompt, waitingForDataRegistry);
+        assertTrue(waitingForDataRegistry.waiting.contains(formIndex));
+    }
+
+    @Test
+    public void requestGeoPoint_launchesCorrectIntent() {
+        activityGeoDataRequester.requestGeoPoint(prompt, waitingForDataRegistry);
+        Intent startedIntent = shadowActivity.getNextStartedActivity();
+
+        assertEquals(startedIntent.getComponent(), new ComponentName(testActivity, GeoPointActivity.class));
+        assertEquals(shadowActivity.getNextStartedActivityForResult().requestCode, LOCATION_CAPTURE);
+
+        Bundle bundle = startedIntent.getExtras();
+        assertThat(bundle.getFloat(GeoPointActivity.EXTRA_ACCURACY_THRESHOLD), equalTo(ActivityGeoDataRequester.DEFAULT_ACCURACY_THRESHOLD));
+        assertThat(bundle.getFloat(GeoPointActivity.EXTRA_UNACCEPTABLE_ACCURACY_THRESHOLD), equalTo(ActivityGeoDataRequester.DEFAULT_UNACCEPTABLE_ACCURACY_THRESHOLD));
+    }
+
+    @Test
+    public void requestGeoPoint_whenPromptHasMapsAppearance_opensMapDialog() {
+        when(prompt.getAppearanceHint()).thenReturn("maps");
+
+        activityGeoDataRequester.requestGeoPoint(prompt, waitingForDataRegistry);
+
+        MockDialogFragment mockFragment = (MockDialogFragment) testActivity.getSupportFragmentManager().getFragments().get(0);
+        assertThat(mockFragment.getFragmentClass(), equalTo(GeoPointMapDialogFragment.class));
+        assertNull(shadowActivity.getNextStartedActivity());
+    }
+
+    @Test
+    public void requestGeoPoint_whenPromptHasPlacementMapAppearance_opensMapDialog() {
+        when(prompt.getAppearanceHint()).thenReturn("placement-map");
+
+        activityGeoDataRequester.requestGeoPoint(prompt, waitingForDataRegistry);
+
+        MockDialogFragment mockFragment = (MockDialogFragment) testActivity.getSupportFragmentManager().getFragments().get(0);
+        assertThat(mockFragment.getFragmentClass(), equalTo(GeoPointMapDialogFragment.class));
+        assertNull(shadowActivity.getNextStartedActivity());
+    }
+
+    @Test
+    public void requestGeoPoint_whenPromptIsReadOnly_opensMapDialog() {
+        when(prompt.isReadOnly()).thenReturn(true);
+
+        activityGeoDataRequester.requestGeoPoint(prompt, waitingForDataRegistry);
+
+        MockDialogFragment mockFragment = (MockDialogFragment) testActivity.getSupportFragmentManager().getFragments().get(0);
+        assertThat(mockFragment.getFragmentClass(), equalTo(GeoPointMapDialogFragment.class));
+        assertNull(shadowActivity.getNextStartedActivity());
+    }
+
+    @Test
+    public void whenWidgetHasAccuracyValue_requestGeoPoint_launchesCorrectIntent() {
+        when(questionDef.getAdditionalAttribute(null, "accuracyThreshold")).thenReturn("10");
+
+        activityGeoDataRequester.requestGeoPoint(prompt, waitingForDataRegistry);
+        Intent startedIntent = shadowActivity.getNextStartedActivity();
+
+        assertEquals(startedIntent.getComponent(), new ComponentName(testActivity, GeoPointActivity.class));
+        assertEquals(shadowActivity.getNextStartedActivityForResult().requestCode, LOCATION_CAPTURE);
+
+        Bundle bundle = startedIntent.getExtras();
+        assertThat(bundle.getFloat(GeoPointActivity.EXTRA_ACCURACY_THRESHOLD), equalTo(10.0f));
+    }
+
+    @Test
+    public void whenWidgetHasInvalidAccuracyValue_requestGeoPoint_launchesCorrectIntentWithDefaultThreshold() {
+        when(questionDef.getAdditionalAttribute(null, "accuracyThreshold")).thenReturn("blah");
+
+        activityGeoDataRequester.requestGeoPoint(prompt, waitingForDataRegistry);
+        Intent startedIntent = shadowActivity.getNextStartedActivity();
+
+        assertEquals(startedIntent.getComponent(), new ComponentName(testActivity, GeoPointActivity.class));
+        assertEquals(shadowActivity.getNextStartedActivityForResult().requestCode, LOCATION_CAPTURE);
+
+        Bundle bundle = startedIntent.getExtras();
+        assertThat(bundle.getFloat(GeoPointActivity.EXTRA_ACCURACY_THRESHOLD), equalTo(ActivityGeoDataRequester.DEFAULT_ACCURACY_THRESHOLD));
+    }
+
+    @Test
+    public void whenWidgetHasUnacceptableAccuracyValue_requestGeoPoint_launchesCorrectIntent() {
+        when(questionDef.getAdditionalAttribute(null, "unacceptableAccuracyThreshold")).thenReturn("20");
+
+        activityGeoDataRequester.requestGeoPoint(prompt, waitingForDataRegistry);
+        Intent startedIntent = shadowActivity.getNextStartedActivity();
+
+        assertEquals(startedIntent.getComponent(), new ComponentName(testActivity, GeoPointActivity.class));
+        assertEquals(shadowActivity.getNextStartedActivityForResult().requestCode, LOCATION_CAPTURE);
+
+        Bundle bundle = startedIntent.getExtras();
+        assertThat(bundle.getFloat(GeoPointActivity.EXTRA_UNACCEPTABLE_ACCURACY_THRESHOLD), equalTo(20.0f));
+    }
+
+    @Test
+    public void whenWidgetHasInvalidUnacceptableAccuracyValue_requestGeoPoint_launchesCorrectIntentWithDefaultThreshold() {
+        when(questionDef.getAdditionalAttribute(null, "unacceptableAccuracyThreshold")).thenReturn("blah");
+
+        activityGeoDataRequester.requestGeoPoint(prompt, waitingForDataRegistry);
+        Intent startedIntent = shadowActivity.getNextStartedActivity();
+
+        assertEquals(startedIntent.getComponent(), new ComponentName(testActivity, GeoPointActivity.class));
+        assertEquals(shadowActivity.getNextStartedActivityForResult().requestCode, LOCATION_CAPTURE);
+
+        Bundle bundle = startedIntent.getExtras();
+        assertThat(bundle.getFloat(GeoPointActivity.EXTRA_UNACCEPTABLE_ACCURACY_THRESHOLD), equalTo(ActivityGeoDataRequester.DEFAULT_UNACCEPTABLE_ACCURACY_THRESHOLD));
+    }
+
+    @Test
+    public void requestGeoTrace_opensDialog() {
+        activityGeoDataRequester.requestGeoPoly(prompt);
+        MockDialogFragment mockFragment = (MockDialogFragment) testActivity.getSupportFragmentManager().getFragments().get(0);
+        assertThat(mockFragment.getFragmentClass(), equalTo(GeoPolyDialogFragment.class));
+        assertThat(mockFragment.requireArguments().getSerializable(WidgetAnswerDialogFragment.ARG_FORM_INDEX), equalTo(prompt.getIndex()));
+    }
+
+    @Test
+    public void requestGeoPoint_whenWidgetHasAllowMockAccuracy_addsItToIntent() {
+        when(prompt.getBindAttributes())
+                .thenReturn(asList(TreeElement.constructAttributeElement("odk", "allow-mock-accuracy", "true")));
+
+        activityGeoDataRequester.requestGeoPoint(prompt, waitingForDataRegistry);
+
+        Intent startedIntent = shadowActivity.getNextStartedActivity();
+        assertEquals(startedIntent.getComponent(), new ComponentName(testActivity, GeoPointActivity.class));
+        assertTrue(startedIntent.getBooleanExtra(EXTRA_RETAIN_MOCK_ACCURACY, false));
+
+        when(prompt.getBindAttributes())
+                .thenReturn(asList(TreeElement.constructAttributeElement("odk", "allow-mock-accuracy", "false")));
+
+        activityGeoDataRequester.requestGeoPoint(prompt, waitingForDataRegistry);
+
+        startedIntent = shadowActivity.getNextStartedActivity();
+        assertEquals(startedIntent.getComponent(), new ComponentName(testActivity, GeoPointActivity.class));
+        assertFalse(startedIntent.getBooleanExtra(EXTRA_RETAIN_MOCK_ACCURACY, true));
+    }
+}

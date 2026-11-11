@@ -14,14 +14,30 @@
 
 package org.odk.collect.android.tasks;
 
+import android.net.Uri;
 import android.os.AsyncTask;
-import android.support.annotation.Nullable;
 
+import androidx.core.util.Pair;
+
+import org.odk.collect.android.application.Collect;
+import org.odk.collect.android.formmanagement.FormsDataService;
+import org.odk.collect.android.formmanagement.ServerFormDetails;
+import org.odk.collect.android.formmanagement.ServerFormUseCases;
+import org.odk.collect.android.injection.DaggerUtils;
+import org.odk.collect.android.injection.config.ProjectDependencyModuleFactory;
 import org.odk.collect.android.listeners.FormListDownloaderListener;
-import org.odk.collect.android.logic.FormDetails;
-import org.odk.collect.android.utilities.DownloadFormListUtils;
+import org.odk.collect.android.projects.ProjectDependencyModule;
+import org.odk.collect.android.projects.ProjectsDataService;
+import org.odk.collect.android.utilities.WebCredentialsUtils;
+import org.odk.collect.forms.FormSource;
+import org.odk.collect.forms.FormSourceException;
+import org.odk.collect.forms.FormsRepository;
+import org.odk.collect.openrosa.forms.OpenRosaClient;
 
 import java.util.HashMap;
+import java.util.List;
+
+import javax.inject.Inject;
 
 /**
  * Background task for downloading forms from urls or a formlist from a url. We overload this task
@@ -30,24 +46,78 @@ import java.util.HashMap;
  * containing form/url pairs is passed, we download those forms.
  *
  * @author carlhartung
+ *
+ * @deprecated Server form list should be retrieved from {@link FormsDataService}
  */
-public class DownloadFormListTask extends AsyncTask<Void, String, HashMap<String, FormDetails>> {
+@Deprecated
+public class DownloadFormListTask extends AsyncTask<Void, String, Pair<List<ServerFormDetails>, FormSourceException>> {
+
+    private final FormsRepository formsRepository;
+    private final FormSource formSource;
+    private final String projectId;
 
     private FormListDownloaderListener stateListener;
+    private WebCredentialsUtils webCredentialsUtils;
     private String url;
     private String username;
     private String password;
 
-    @Override
-    protected HashMap<String, FormDetails> doInBackground(Void... values) {
-        return new DownloadFormListUtils().downloadFormList(url, username, password, false);
+    @Inject
+    FormsDataService formsDataService;
+
+    @Inject
+    ProjectsDataService projectsDataService;
+
+    @Inject
+    ProjectDependencyModuleFactory projectDependencyModuleFactory;
+
+    public DownloadFormListTask() {
+        DaggerUtils.getComponent(Collect.getInstance()).inject(this);
+
+        projectId = projectsDataService.requireCurrentProject().getUuid();
+        ProjectDependencyModule projectDependencyModule = projectDependencyModuleFactory.create(projectId);
+        formsRepository = projectDependencyModule.getFormsRepository();
+        formSource = projectDependencyModule.getFormSource();
     }
 
     @Override
-    protected void onPostExecute(HashMap<String, FormDetails> value) {
+    protected Pair<List<ServerFormDetails>, FormSourceException> doInBackground(Void... values) {
+        formsDataService.refresh(projectId);
+
+        if (webCredentialsUtils != null) {
+            setTemporaryCredentials();
+        }
+
+        List<ServerFormDetails> formList = null;
+        FormSourceException exception = null;
+
+        try {
+            formList = ServerFormUseCases.fetchFormDetails(formsRepository, formSource);
+        } catch (FormSourceException e) {
+            exception = e;
+        } finally {
+            if (webCredentialsUtils != null) {
+                clearTemporaryCredentials();
+            }
+        }
+
+        return new Pair<>(formList, exception);
+    }
+
+    @Override
+    protected void onPostExecute(Pair<List<ServerFormDetails>, FormSourceException> result) {
         synchronized (this) {
             if (stateListener != null) {
-                stateListener.formListDownloadingComplete(value);
+                if (result.first != null) {
+                    HashMap<String, ServerFormDetails> detailsHashMap = new HashMap<>();
+                    for (ServerFormDetails details : result.first) {
+                        detailsHashMap.put(details.getFormId(), details);
+                    }
+
+                    stateListener.formListDownloadingComplete(detailsHashMap, result.second);
+                } else {
+                    stateListener.formListDownloadingComplete(null, result.second);
+                }
             }
         }
     }
@@ -58,10 +128,41 @@ public class DownloadFormListTask extends AsyncTask<Void, String, HashMap<String
         }
     }
 
-    public void setAlternateCredentials(@Nullable String url, @Nullable String username, @Nullable String password) {
+    public void setAlternateCredentials(WebCredentialsUtils webCredentialsUtils, String url, String username, String password) {
+        this.webCredentialsUtils = webCredentialsUtils;
+        OpenRosaClient openRosaClient = (OpenRosaClient) formSource;
+        openRosaClient.updateWebCredentialsUtils(webCredentialsUtils);
+
         this.url = url;
+        if (url != null && !url.isEmpty()) {
+            openRosaClient.updateUrl(url);
+        }
+
         this.username = username;
         this.password = password;
     }
 
+    private void setTemporaryCredentials() {
+        if (url != null) {
+            String host = Uri.parse(url).getHost();
+
+            if (host != null) {
+                if (username != null && password != null) {
+                    webCredentialsUtils.saveCredentials(url, username, password);
+                } else {
+                    webCredentialsUtils.clearCredentials(url);
+                }
+            }
+        }
+    }
+
+    private void clearTemporaryCredentials() {
+        if (url != null) {
+            String host = Uri.parse(url).getHost();
+
+            if (host != null) {
+                webCredentialsUtils.clearCredentials(url);
+            }
+        }
+    }
 }

@@ -1,0 +1,51 @@
+plugins {
+    alias(libs.plugins.androidLibrary)
+}
+
+apply(from = "../config/quality.gradle")
+
+android {
+    compileSdk = libs.versions.compileSdk.get().toInt()
+
+    defaultConfig {
+        minSdk = libs.versions.minSdk.get().toInt()
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    compileOptions {
+        isCoreLibraryDesugaringEnabled = true
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
+    }
+    namespace = "org.odk.collect.androidtest"
+}
+
+dependencies {
+    coreLibraryDesugaring(libs.desugar)
+
+    implementation(project(":async"))
+    implementation(libs.junit)
+    implementation(libs.androidxTestCoreKtx)
+    implementation(libs.androidxLifecycleLivedataKtx)
+    implementation(libs.androidxLifecycleRuntimeKtx)
+    implementation(libs.androidxTestEspressoCore)
+    implementation(libs.androidxAppcompat)
+    implementation(libs.androidxTestEspressoIntents)
+    implementation(libs.timber)
+    implementation(libs.kotlinxCoroutinesTest)
+    val composeBom = platform(libs.androidxComposeBom)
+    implementation(composeBom)
+    implementation(libs.androidXComposeUiTestJunit4)
+
+    //noinspection FragmentGradleConfiguration
+    debugApi(libs.androidxFragmentTesting) {
+        exclude(group = "androidx.test", module = "monitor") // fixes issue https://github.com/android/android-test/issues/731
+    }
+}

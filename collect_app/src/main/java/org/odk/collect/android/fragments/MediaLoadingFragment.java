@@ -1,21 +1,23 @@
 package org.odk.collect.android.fragments;
 
-import android.app.Activity;
-import android.app.Fragment;
+import android.content.Context;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
+import androidx.annotation.Nullable;
+import androidx.fragment.app.Fragment;
 
-import org.odk.collect.android.activities.FormEntryActivity;
+import org.jetbrains.annotations.NotNull;
+import org.odk.collect.android.activities.FormFillingActivity;
+import org.odk.collect.android.javarosawrapper.FormController;
 import org.odk.collect.android.tasks.MediaLoadingTask;
 
 public class MediaLoadingFragment extends Fragment {
 
     private MediaLoadingTask mediaLoadingTask;
-    private FormEntryActivity formEntryActivity;
 
-    public void beginMediaLoadingTask(Uri uri) {
-        mediaLoadingTask = new MediaLoadingTask(formEntryActivity);
+    public void beginMediaLoadingTask(Uri uri, FormController formController) {
+        mediaLoadingTask = new MediaLoadingTask((FormFillingActivity) getActivity(), formController.getInstanceFile());
         mediaLoadingTask.execute(uri);
     }
 
@@ -26,19 +28,14 @@ public class MediaLoadingFragment extends Fragment {
     }
 
     @Override
-    public void onAttach(Activity activity) {
-        super.onAttach(activity);
-        this.formEntryActivity = (FormEntryActivity) activity;
+    public void onAttach(@NotNull Context context) {
+        super.onAttach(context);
         if (mediaLoadingTask != null) {
-            mediaLoadingTask.onAttach(formEntryActivity);
+            mediaLoadingTask.onAttach((FormFillingActivity) getActivity());
         }
     }
 
-    @Override
-    public void onDetach() {
-        super.onDetach();
-        if (mediaLoadingTask != null) {
-            mediaLoadingTask.onDetach();
-        }
+    public boolean isMediaLoadingTaskRunning() {
+        return mediaLoadingTask != null && mediaLoadingTask.getStatus() == AsyncTask.Status.RUNNING;
     }
 }
